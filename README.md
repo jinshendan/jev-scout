@@ -4,9 +4,9 @@
 
 Jev Scout explores a repository, keeps source-backed observations recoverable, and hands bounded working context alongside inspectable evidence to a developer or a coding agent. Its research goal is to determine when a decision model such as Jev can improve the cost and reliability of code investigation.
 
-**Status:** Alpha. M1's offline investigator and **M2a: an optional typed Jev candidate selector** are available on `main`, with explicit rule fallback and decision accounting. Live provider validation, adaptive evidence recovery, and policy comparisons remain unfinished. No efficiency or repair-success claims have been established.
+**Status:** Alpha. The offline investigator, optional typed Jev selector, **explicit evidence recovery**, and **frozen policy-comparison harness** are implemented. Live provider validation, adaptive candidate expansion, repair evaluation, and repository memory remain unfinished. No efficiency or repair-success claims have been established.
 
-[Quick start](#quick-start) · [Jev policy](docs/jev-policy.md) · [Architecture](docs/architecture.md) · [Demo](docs/demo.md) · [Roadmap](docs/roadmap.md) · [Evaluation](docs/evaluation.md)
+[Quick start](#quick-start) · [Recovery](docs/evidence-recovery.md) · [Comparisons](docs/policy-comparison.md) · [Jev policy](docs/jev-policy.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 ## The problem
 
@@ -41,18 +41,20 @@ flowchart LR
 
 The default policy is deterministic and runs without an API key. Explicitly selecting Jev enables a remote backend behind `Policy.choose(state, candidates)`. Jev chooses an existing candidate ID; local code validates the response and executes the read. Provider failures and low-confidence answers fall back to rules while remaining visible in the trace.
 
-See the [architecture document](docs/architecture.md), [evidence decision](docs/adr/0001-evidence-first-runtime.md), and [Jev decision](docs/adr/0002-typed-jev-decisions.md) for boundaries and tradeoffs.
+Explicit recovery rebuilds bounded context from retained observation IDs after checking them against current source. Comparisons capture one bounded frontier and source snapshot for both policies, so later source changes cannot give the two arms different read content.
+
+See the [architecture document](docs/architecture.md) and [design decisions](docs/adr/) for boundaries and tradeoffs.
 
 ## Incremental delivery
 
 | Milestone | Deliverable | Acceptance question |
 | --- | --- | --- |
 | M1 — Local evidence baseline | Available on main: read-only investigation, bounded context, raw events, evidence bundle, source-linked report | Can a run preserve and expose useful source evidence reproducibly? |
-| M2 — Jev decision backend | M2a available on main: typed selection, explicit fallback, usage accounting. Recovery and comparisons remain planned. | Does Jev improve candidate selection over the rule baseline? |
+| M2 — Jev decision backend | Typed selection, fallback, accounting, explicit recovery, and frozen comparisons. Live validation and adaptive expansion remain pending. | Does Jev improve candidate selection over the rule baseline? |
 | M3 — Repair and evaluation | Fixed downstream solver, executable verification, paired experiments | Does investigation improve the success–cost tradeoff end to end? |
 | M4 — Repository memory | Version-aware reuse, invalidation, chronological evaluation | When does accumulated experience help, and when should it be ignored? |
 
-The runnable M1 baseline and M2a adapter were delivered in [PR #5](https://github.com/jinshendan/jev-scout/pull/5) and [PR #6](https://github.com/jinshendan/jev-scout/pull/6). Both are available on `main`. Each milestone is delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
+The M1 baseline and M2a adapter were delivered in [PR #5](https://github.com/jinshendan/jev-scout/pull/5) and [PR #6](https://github.com/jinshendan/jev-scout/pull/6). M2b adds recovery and controlled comparison inputs. Each milestone is delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
 
 ## Quick start
 
@@ -89,7 +91,37 @@ scout investigate --repo /path/to/repository \
   --output /tmp/scout-investigation-001
 ```
 
-`--max-steps` bounds snippet actions, including skipped actions. `--max-context-chars` bounds active excerpt characters, not tokens or the size of retained artifacts. The result also records fixed discovery, source-read, and candidate limits. Reuse an observation by its ID in `evidence.json`; automatic run resumption is future work.
+`--max-steps` bounds snippet actions, including skipped actions. `--max-context-chars` bounds active excerpt characters, not tokens or the size of retained artifacts. The result also records fixed discovery, source-read, and candidate limits. Automatic run resumption is future work.
+
+## Recover evidence and compare policies
+
+Recover a retained observation even if it was evicted from the original working context:
+
+```sh
+scout recover \
+  --evidence .scout/demo/evidence.json \
+  --repo examples/cancellation \
+  --observation o0001 \
+  --output .scout/recovery \
+  --max-context-chars 1200
+```
+
+Use IDs from your `evidence.json`; repeat `--observation` to request more than one. Recovery preserves requested historical excerpts and rechecks source hashes, spans, and text. Only matching current evidence enters the new bounded context. Inspect `recovery.json` and `report.md` for stale or unavailable evidence. See the [recovery guide](docs/evidence-recovery.md).
+
+Run an offline rule-versus-rule sanity comparison over shared captured inputs:
+
+```sh
+scout compare \
+  --repo examples/cancellation \
+  --task "Investigate whether Request::cancel removes queued callbacks." \
+  --output .scout/comparison \
+  --max-steps 6 \
+  --max-context-chars 1200
+```
+
+The result contains `comparison.json`, `report.md`, and each arm's normal artifacts under `rule/` and `challenger/`. Read the [comparison guide](docs/policy-comparison.md) before adding `--challenger jev`: that enables remote source transmission and requires `TYPESAFE_API_KEY`. Shared inputs and behavioral diagnostics make a comparison inspectable; they do not establish evidence quality or repair success.
+
+All output directories must be fresh and outside the investigated repository. Choose new names when repeating these examples.
 
 ## Optional Jev selection
 
@@ -130,6 +162,16 @@ M1 is a lexical source inspector. It does not provide semantic C++ analysis, aut
 - Schema 2 decision traces with requested and returned models, distributions, latency, and reported usage.
 
 M2a changes candidate selection within the fixed frontier. It does not generate queries, recover evicted context automatically, edit code, add a solver, or create persistent repository memory. Those are tracked separately in the [roadmap](docs/roadmap.md).
+
+## Implemented in M2b
+
+- Explicit observation recovery from schema 1 or 2 bundles, with bounded imports and current-source validation.
+- Retention of historical excerpts while excluding changed, unavailable, or mismatched evidence from active context.
+- One captured frontier, task, read content, and budget configuration shared by both comparison arms.
+- Separate snapshot provenance, checkout revalidation, setup/arm timing, and provider accounting.
+- Offline rule-versus-rule sanity checks and opt-in rule-versus-Jev comparisons.
+
+The captured source is bounded and sequential, not an atomic repository snapshot or Git commit. Agreement and overlap describe policy behavior; they are not correctness scores. Recovery does not resume a run or prove an imported artifact's authenticity. See [ADR 0003](docs/adr/0003-recovery-and-frozen-comparisons.md).
 
 ## Development
 

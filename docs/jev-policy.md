@@ -2,7 +2,7 @@
 
 M2a adds a Jev policy to the existing read-only investigator. The default remains `--policy rule`, which runs offline without credentials. Jev selects an existing candidate ID; the runtime owns every read, budget, and retained observation.
 
-The adapter is available on `main`, delivered in [PR #6](https://github.com/jinshendan/jev-scout/pull/6) on top of the [M1 baseline](https://github.com/jinshendan/jev-scout/pull/5). Controlled HTTP fixtures validate our contract and failure paths. An authenticated live-provider run and a policy-quality comparison have not been performed.
+The adapter is available on `main`, delivered in [PR #6](https://github.com/jinshendan/jev-scout/pull/6) on top of the [M1 baseline](https://github.com/jinshendan/jev-scout/pull/5). Controlled HTTP fixtures validate our contract and failure paths. M2b adds a [frozen-input comparison harness](policy-comparison.md) and [explicit evidence recovery](evidence-recovery.md). An authenticated live-provider run and a policy-quality comparison have not been performed.
 
 ## Enable the policy
 
@@ -78,6 +78,8 @@ Each decision records `step`, `candidate_id`, `backend`, `fallback_reason`, and 
 
 `policy_accounting` reports decision and backend counts, fallback decisions, provider attempts and latency, reported input/output token sums, and the number of attempts with unknown usage. An entirely offline run has no provider attempts or unknown provider usage; reported token sums of zero describe those absent calls.
 
+Policy configuration records `transport: "http"` for the official adapter or `"injected"` for a supplied test transport. Comparisons keep this distinction visible; a controlled fixture is not live-provider validation.
+
 Failed attempts can consume provider resources even when no usage is returned. Accounting reports what the provider disclosed; it does not establish an exact cost for timed-out calls or substitute zero for unknown usage. A fallback run should not be described as a successful Jev-selected investigation merely because `--policy jev` was requested.
 
 ## Confidence and remaining work
@@ -86,4 +88,4 @@ TypeSafe describes confidence as a statistic of how concentrated the answer's pr
 
 The default floor of `0.0` permits every locally valid distribution. It is a starting configuration, not an empirically validated reliability threshold. Compare thresholds against task outcomes before drawing quality conclusions.
 
-M2a changes selection within a fixed lexical frontier. It does not generate new queries, recover context automatically, diagnose a root cause, repair code, execute investigated source, or learn persistent memory. Adaptive evidence recovery and controlled comparisons remain [M2 work](roadmap.md); downstream repair and chronological memory belong to M3 and M4.
+M2a changes selection within a fixed lexical frontier. M2b provides manual recovery and shared-input comparison mechanics. Automatic recovery, adaptive candidate expansion, and credentialed comparisons remain [M2 work](roadmap.md). Root-cause verification, downstream repair, and chronological memory belong to later milestones; the current investigator does not execute or edit source.

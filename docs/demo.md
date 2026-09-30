@@ -11,7 +11,12 @@ After installing Jev Scout as described in the repository README, run this from
 the repository root:
 
 ```sh
-scout investigate --repo examples/cancellation --task 'Investigate whether Request::cancel removes queued callbacks.' --output .scout/demo
+scout investigate \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/demo \
+  --max-steps 6 \
+  --max-context-chars 1200
 ```
 
 The supplied question names a concrete symbol. The rule-based investigator can
@@ -36,6 +41,54 @@ definitions when a link is missing.
 Use `--max-steps N` and `--max-context-chars N` to bound an investigation. A
 budget limit can stop evidence collection before all useful source is inspected;
 it should not be read as evidence that a missing path does not exist.
+
+Use fresh output directories outside `examples/cancellation` for every command.
+If `.scout/demo` already exists from an earlier run, choose a new name and use
+that name in the recovery command below.
+
+## Recover a retained observation
+
+Find an observation ID in the generated `evidence.json`, then request it
+explicitly. The first recorded observation normally has ID `o0001`:
+
+```sh
+scout recover \
+  --evidence .scout/demo/evidence.json \
+  --repo examples/cancellation \
+  --observation o0001 \
+  --output .scout/recovery \
+  --max-context-chars 1200
+```
+
+Read `.scout/recovery/report.md` and `recovery.json`. Recovery retains the
+requested original excerpt and checks it against current source before placing
+it in bounded context. It can recover a context-evicted record; it does not
+continue the original run. Repeat `--observation` for additional IDs. The
+[recovery guide](evidence-recovery.md) explains stale and mismatched records.
+
+## Compare on the same captured inputs
+
+Run the offline sanity comparison:
+
+```sh
+scout compare \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/comparison \
+  --max-steps 6 \
+  --max-context-chars 1200
+```
+
+The default challenger is another fresh rule policy. Both arms use one captured
+candidate frontier and source content. Inspect `comparison.json`, the top-level
+`report.md`, and the normal evidence bundles under `rule/` and `challenger/`.
+Frozen observations describe captured content; a separate checkout check shows
+whether the original files still match afterward.
+
+Identical rule decisions are a sanity check, not a quality or cost result.
+`--challenger jev` explicitly enables TypeSafe source transmission and requires
+an environment key. See the [comparison guide](policy-comparison.md) before
+running it on private source. No live Jev benefit is established by this demo.
 
 ## Read the evidence
 
