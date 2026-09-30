@@ -2,11 +2,19 @@
 
 import json
 import re
+from collections import Counter
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .models import ContextEntry, DecisionState, InvestigationResult, Policy, RulePolicy
+from .models import (
+    ContextEntry,
+    DecisionState,
+    InvestigationResult,
+    Policy,
+    PolicyDecision,
+    RulePolicy,
+)
 from .repository import (
     MAX_CANDIDATES,
     MAX_FILE_BYTES,
@@ -81,15 +89,41 @@ def _add_context(active, observation, max_chars, events, evicted):
         )
 
 
+def _policy_accounting(decisions: list[dict]) -> dict:
+    attempts = [attempt for decision in decisions for attempt in decision["attempts"]]
+    return {
+        "decisions": len(decisions),
+        "backend_decisions": dict(sorted(Counter(d["backend"] for d in decisions).items())),
+        "fallback_decisions": sum(d["fallback_reason"] is not None for d in decisions),
+        "provider_attempts": len(attempts),
+        "provider_latency_ms": round(sum(a["elapsed_ms"] for a in attempts), 3),
+        "reported_input_tokens": sum(a["input_tokens"] or 0 for a in attempts),
+        "reported_output_tokens": sum(a["output_tokens"] or 0 for a in attempts),
+        "unknown_input_usage_attempts": sum(a["input_tokens"] is None for a in attempts),
+        "unknown_output_usage_attempts": sum(a["output_tokens"] is None for a in attempts),
+    }
+
+
 def _render_report(bundle: dict) -> str:
     context = bundle["context"]
     scan = bundle["scan"]
+    accounting = bundle["policy_accounting"]
     lines = [
         "# Code investigation report",
         "",
         f"Task: {bundle['task']}",
         "",
         "This report contains lexical observations, not a root-cause diagnosis.",
+        "",
+        f"Configured policy: `{bundle['policy']}`.",
+        f"Provider attempts: {accounting['provider_attempts']}; "
+        f"rule fallbacks: {accounting['fallback_decisions']}; "
+        f"provider attempt latency: {accounting['provider_latency_ms']} ms.",
+        f"Reported input/output tokens: {accounting['reported_input_tokens']} / "
+        f"{accounting['reported_output_tokens']}; counts unavailable for "
+        f"{accounting['unknown_input_usage_attempts']} / "
+        f"{accounting['unknown_output_usage_attempts']} attempts respectively. "
+        "Reported sums exclude unknown usage and are not whole-run cost estimates.",
         "",
         f"Stop reason: `{bundle['stop_reason']}`.",
         f"Snippet actions: {bundle['steps']} / {bundle['limits']['max_steps']}.",
@@ -127,6 +161,23 @@ def _render_report(bundle: dict) -> str:
         lines.extend([fence + "text", observation["text"].rstrip("\n"), fence, ""])
     lines.extend(
         [
+            "## Policy decisions",
+            "",
+            "Confidence describes the provider's choice distribution; "
+            "it is not the probability of solving the task.",
+            "",
+        ]
+    )
+    for decision in bundle["decisions"]:
+        lines.append(
+            f"- Step {decision['step']}: `{decision['backend']}` selected "
+            f"`{decision['candidate_id']}`; "
+            f"fallback: `{decision['fallback_reason']}`; "
+            f"provider attempts: {len(decision['attempts'])}."
+        )
+    lines.extend(
+        [
+            "",
             "## Limits and follow-up",
             "",
             "Candidates come from filename and keyword matching. Missing candidates, "
@@ -134,7 +185,10 @@ def _render_report(bundle: dict) -> str:
             "Context eviction and truncation affect only the active projection. "
             "Raw observations remain in events.jsonl and evidence.json.",
             "Source hashes describe snapshots; re-check sources before using these observations "
-            "to make changes. No compilation, tests, patches, Jev, or LLM calls were performed.",
+            "to make changes. No compilation, tests, or patches were performed. "
+            "Remote policy calls, when enabled, select existing candidates and do not verify code.",
+            "Provider request bodies are recorded in evidence.json and events.jsonl; "
+            "authentication headers and raw error bodies are not recorded.",
             "",
         ]
     )
@@ -155,6 +209,8 @@ def investigate(
     if max_steps < 1 or max_context_chars < 1:
         raise ValueError("Step and context budgets must be positive.")
     policy = RulePolicy() if policy is None else policy
+    describe = getattr(policy, "describe", None)
+    policy_config = describe() if callable(describe) else {"name": type(policy).__name__}
     with SafeRepository(Path(repo)) as repository:
         destination = _prepare_output(Path(output), repository.root)
         events = EventLog(destination / "events.jsonl")
@@ -166,6 +222,7 @@ def investigate(
                 max_steps=max_steps,
                 max_context_chars=max_context_chars,
                 policy=type(policy).__name__,
+                policy_config=policy_config,
             )
             candidates, terms = repository.discover(task)
             events.emit(
@@ -175,7 +232,7 @@ def investigate(
                 candidates=[candidate.to_dict() for candidate in candidates],
             )
             by_id = {candidate.id: candidate for candidate in candidates}
-            seen, observations, active, evicted = set(), [], [], []
+            seen, observations, active, evicted, decisions = set(), [], [], [], []
             steps, stop_reason = 0, "no_candidates"
             while candidates and steps < max_steps:
                 if len(seen) == len(candidates):
@@ -184,7 +241,19 @@ def investigate(
                 state = DecisionState(
                     task, steps, max_steps, frozenset(seen), tuple(active), max_context_chars
                 )
-                chosen = policy.choose(state, tuple(candidates))
+                selection = policy.choose(state, tuple(candidates))
+                decision = (
+                    selection
+                    if isinstance(selection, PolicyDecision)
+                    else PolicyDecision(
+                        selection,
+                        "rule" if isinstance(policy, RulePolicy) else type(policy).__name__,
+                    )
+                )
+                decision_record = {"step": steps + 1, **asdict(decision)}
+                decisions.append(decision_record)
+                events.emit("policy_decision", **decision_record)
+                chosen = decision.candidate_id
                 if chosen is None:
                     stop_reason = "policy_stopped"
                     break
@@ -258,10 +327,13 @@ def investigate(
                     current_sha256=observation["current_sha256"],
                 )
             bundle = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "repo": str(repository.root),
                 "task": task,
                 "policy": type(policy).__name__,
+                "policy_config": policy_config,
+                "decisions": decisions,
+                "policy_accounting": _policy_accounting(decisions),
                 "stop_reason": stop_reason,
                 "steps": steps,
                 "limits": {
