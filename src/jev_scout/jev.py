@@ -189,6 +189,7 @@ class JevPolicy:
     def describe(self) -> dict:
         return {
             "backend": "jev",
+            "transport": "http" if self._transport is _post else "injected",
             "model": self.model,
             "min_confidence": self.min_confidence,
             "max_calls": self.max_calls,

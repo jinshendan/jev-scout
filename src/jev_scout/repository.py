@@ -45,6 +45,7 @@ IGNORED_DIRS = {
     ".codex",
     ".agents",
     ".cache",
+    ".scout",
     ".venv",
     "venv",
     "node_modules",
@@ -208,6 +209,8 @@ class SafeRepository:
             stack.extend(reversed(sorted(dirs)))
 
     def read(self, relative_path: str, max_bytes: int | None = None) -> SourceFile:
+        if not isinstance(relative_path, str):
+            raise SkippedFile("unsafe_path")
         path = PurePosixPath(relative_path)
         if (
             not relative_path
@@ -215,8 +218,13 @@ class SafeRepository:
             or ".." in path.parts
             or "\\" in relative_path
             or not path.parts
+            or path.as_posix() != relative_path
+            or len(relative_path) > 4096
+            or any(ord(char) < 32 or ord(char) == 127 for char in relative_path)
         ):
             raise SkippedFile("unsafe_path")
+        if any(part in IGNORED_DIRS or self._excluded_name(part) for part in path.parts):
+            raise SkippedFile("excluded_path")
         directory_fd = os.dup(self._root_fd)
         file_fd = None
         try:
