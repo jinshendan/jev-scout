@@ -53,6 +53,8 @@ An authenticated live-provider run has not been validated. M2a provides a testab
 
 **Implemented in this increment:** recover retained observations by ID and compare two independent policy arms over one bounded capture. See the [recovery guide](evidence-recovery.md), [comparison guide](policy-comparison.md), and [ADR 0003](adr/0003-recovery-and-frozen-comparisons.md).
 
+**Delivery:** [PR #7](https://github.com/jinshendan/jev-scout/pull/7).
+
 ```sh
 scout recover --evidence PATH --repo PATH --observation ID --output DIR \
   --max-context-chars N
