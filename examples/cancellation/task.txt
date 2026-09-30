@@ -1,0 +1,7 @@
+Investigate whether Request::cancel removes queued callbacks.
+
+Follow Request::queue_completion, Queue::enqueue, Queue::remove_for, and
+Queue::dispatch_one. Distinguish removing a queue entry from skipping the
+on_complete callback. Inspect weak_request and cancelled_ when tracing Request
+lifetime. Collect file and line evidence and list questions that require runtime
+validation. Do not infer a bug or generate a fix from search matches alone.
