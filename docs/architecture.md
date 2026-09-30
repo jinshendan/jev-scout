@@ -1,10 +1,10 @@
 # Jev Scout architecture
 
-Jev Scout investigates a repository and produces inspectable evidence before a coding agent attempts a change. M1 implements the accepted evidence contract as a read-only, offline, deterministic rule baseline in Python 3.11+ using the standard library. It does not call a language model or produce a repair.
+Jev Scout investigates a repository and produces inspectable evidence before a coding agent attempts a change. M1 implements the accepted evidence contract as a read-only, offline, deterministic rule baseline. M2a adds an optional Jev candidate selector. Both use Python 3.11+ and the standard library; neither produces a repair.
 
-The design separates evidence collection, bounded working context, and the policy that chooses what to inspect next. Provider-specific behavior belongs behind a future policy adapter, not in evidence ownership or source attribution.
+The design separates evidence collection, bounded working context, and the policy that chooses what to inspect next. Provider-specific behavior belongs behind a policy adapter; evidence ownership and source attribution stay local.
 
-## M1 data flow
+## Current data flow
 
 ```text
 task + repository
@@ -14,6 +14,10 @@ bounded scan --> inspection candidates
                         |
                         v
                Policy.choose(state, candidates)
+                 /                   \
+          offline rules       optional Jev Choice
+                 \                   /
+                  validated decision
                         |
                         v
                bounded source inspection
@@ -28,39 +32,44 @@ bounded scan --> inspection candidates
             events.jsonl / evidence.json / report.md
 ```
 
-Candidates identify concrete paths, spans, and expected SHA-256 values. The policy returns a candidate ID or `None` to stop. M1 ranks filename and content keyword matches once, then selects bounded excerpts from that fixed frontier. It does not generate new queries or update ranking from observations. Adaptive search is a later extension. The selected observations support a handoff for a person or a future solver.
+Candidates identify concrete paths, spans, and expected SHA-256 values. The policy returns a candidate ID, `None` to stop, or a typed `PolicyDecision` with trace metadata. Existing policies returning IDs remain compatible. The investigator validates the selected ID against the current frontier before executing a read.
 
-The first milestone's CLI is:
+Discovery ranks filename and content keyword matches once and constructs a fixed frontier. The rule policy selects deterministically. Jev can use the task and active context to choose a different next excerpt, but it cannot create an action or discover a new candidate. Adaptive search and context recovery remain later M2 work. The observations support a handoff for a person or a future solver.
+
+The offline CLI remains:
 
 ```sh
 scout investigate --repo PATH --task TEXT --output DIR \
   --max-steps N --max-context-chars N
 ```
 
-The implementation and its tests define argument defaults, schema, ranking behavior, and the precise limits applied to scans and reads.
+Add `--policy jev` to enable remote selection. The [Jev policy guide](jev-policy.md) defines configuration, transmitted data, provider contract, and fallback behavior. The implementation and its tests define argument defaults, schema, ranking behavior, and the precise limits applied to scans and reads.
 
 ## Implementation map
 
 | Module | Responsibility |
 | --- | --- |
-| `models.py` | Immutable candidates, task state, context entries, policy interface, result paths |
+| `models.py` | Immutable candidates, task state, context entries, typed policy decisions, result paths |
 | `repository.py` | Directory-relative source reads, bounded discovery, lexical ranking, qualified-symbol windows |
 | `investigator.py` | Action loop, source validity, context projection, ordered events, output artifacts |
+| `jev.py` | Bounded TypeSafe HTTP requests, closed-choice validation, rule fallback, decision metadata |
 | `cli.py` | Argument parsing, user-facing errors, and run summary |
 
-The runtime has no third-party dependencies. Provider adapters and persistent repository memory remain outside M1.
+The runtime has no third-party dependencies. Jev is replaceable; persistent repository memory and an LLM solver remain future components.
 
 ## Boundaries and contracts
 
 | Boundary | Responsibility |
 | --- | --- |
 | Repository access | Read local content within the source scope; bound scans and reads. |
-| Policy | Choose an inspection candidate or stop. Model-driven policy is planned, not part of M1. |
+| Policy | Choose an inspection candidate or stop; expose provider decisions and fallback without owning source reads. |
 | Evidence | Preserve observed text and its source identity. Distinguish observations from interpretations. |
 | Working context | Select observations within a character budget without destroying retained evidence. |
 | Reporting | Present candidates, supporting observations, limitations, and the stopping reason. |
 
-Repository text, task text, comments, and documentation are data. Instructions found in them do not authorize running commands, changing source, or widening access. M1 performs no network requests and no build, test, or patch actions. It requires an output directory outside the repository and refuses to overwrite existing result artifacts.
+Repository text, task text, comments, and documentation are data. Instructions found in them do not authorize running commands, changing source, or widening access. The rule policy performs no network requests. Explicit Jev selection transmits the task, candidate descriptions, relative paths and previews, and active context to the fixed official TypeSafe endpoint. Source content does not control that endpoint or the permitted actions.
+
+Neither policy builds, tests, or patches investigated source. The investigator requires an output directory outside the repository and refuses to overwrite existing result artifacts.
 
 Safe source reads currently require POSIX directory-relative open and no-follow support. M1 skips symlinks, non-regular files, oversized files, binary content, and non-UTF-8 text. This is a bounded textual baseline; skipped content remains a coverage limitation.
 
@@ -70,9 +79,15 @@ An observation remains tied to its source path and span. Expected hashes identif
 
 The artifacts have complementary roles:
 
-- `events.jsonl` records ordered investigation events and outcomes.
-- `evidence.json` contains retained observations and the selected working context.
-- `report.md` presents the investigation for human review.
+- `events.jsonl` records ordered investigation events, inspectable provider request payloads, decisions, and outcomes.
+- `evidence.json` schema 2 contains retained observations, working context, policy configuration, decision traces, and accounting.
+- `report.md` presents the investigation and provider/fallback accounting for human review.
+
+Schema 2 extends the M1 handoff with typed decision metadata. Source paths, spans, fingerprints, observed text, and raw read events retain their meaning. Consumers that require schema 1 must explicitly support schema 2 before using new runs.
+
+Decision traces distinguish requested backend from the backend that actually selected an action. Jev traces include requested and returned model identifiers, confidence and probability distribution when valid, nullable provider token usage, elapsed milliseconds, attempted calls, and fallback reasons. Missing usage is unknown, not zero; a timeout can still correspond to provider work that Scout cannot account for.
+
+Credentials, authorization headers, raw provider errors, and exception strings are excluded from artifacts. Request payloads intentionally contain source excerpts. Artifact privacy follows the source being investigated; inspectability does not make private source suitable for publication.
 
 Stored observations are excerpts from an investigation, not a complete archive of the repository. Reading a source file later may return different content. Evidence recovery means inspecting a preserved observation and locating its source. It does not imply automatic run resumption, reproduction of a model answer, or replay of arbitrary tool side effects.
 
@@ -86,11 +101,21 @@ Discovery uses bounded directory iteration. When the entry limit is reached, onl
 
 A ranking score estimates investigative relevance. It does not certify a diagnosis, identify every necessary file, or predict that a patch will pass tests. M1 does not attach an empirically calibrated correctness probability to a candidate score.
 
+## Remote decision boundary
+
+Jev receives every unseen candidate in one Choice question, described with concrete source metadata. The whole serialized UTF-8 request must fit the configured request-byte cap; otherwise Scout selects by rules without sending it. This preserves candidate coverage instead of hiding a shortlist change inside the adapter. Response bodies also have a fixed byte cap.
+
+Each selection uses at most one HTTP attempt. A separate provider-call budget counts attempts, including failed attempts, per `JevPolicy` instance. The CLI creates one instance per investigation; library callers may share its budget by reusing it. The transport uses the fixed HTTPS endpoint, rejects redirects, and does not inherit proxy settings. Its timeout bounds socket operations rather than guaranteeing a whole-run wall-clock deadline.
+
+Local validation checks the requested question and type, selected frontier ID, distribution keys, finite probabilities and confidence, and probability normalization. A malformed response, provider failure, low confidence, request limit, or exhausted call budget produces an explicit rule fallback. A low-confidence response may still have consumed tokens; its reported usage remains visible. Missing or malformed API keys are setup errors before investigation. A key rejected by the provider produces an authentication-error fallback.
+
+The confidence floor is a configurable control, with a default of `0.0`. It is not an empirically validated reliability threshold. TypeSafe describes confidence as a statistic of distribution concentration; it is distinct from selected-option probability and task success. See the [policy guide](jev-policy.md) and [ADR 0002](adr/0002-typed-jev-decisions.md).
+
 ## Errors and recovery
 
 Keep successful observations when a later inspection fails. Disclose the affected source or action rather than presenting an empty success. A partial result should expose gaps so a later investigator can broaden its search. Fatal setup or artifact-write errors must remain distinguishable from a completed investigation with no useful candidates.
 
-Future Jev integration should use a recoverable handoff: suggested files guide the solver while the solver can request additional evidence or inspect elsewhere. Restricting a solver to an incomplete candidate set can turn a recoverable localization miss into an unavoidable repair failure.
+Later M2 work should support evidence expansion and context recovery. A future solver should be able to request additional evidence or inspect elsewhere. Restricting a solver to an incomplete candidate set can turn a recoverable localization miss into an unavoidable repair failure.
 
 ## Language and cache limitations
 
