@@ -52,7 +52,7 @@ See the [architecture document](docs/architecture.md) and [first design decision
 | M3 — Repair and evaluation | Fixed downstream solver, executable verification, paired experiments | Does investigation improve the success–cost tradeoff end to end? |
 | M4 — Repository memory | Version-aware reuse, invalidation, chronological evaluation | When does accumulated experience help, and when should it be ignored? |
 
-M1 is the first implementation PR. Each later milestone will be delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
+The runnable M1 baseline is available in [PR #5](https://github.com/jinshendan/jev-scout/pull/5). See the [implementation branch and quick start](https://github.com/jinshendan/jev-scout/tree/feat/local-evidence-baseline#quick-start) to try it during review. Each later milestone will be delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
 
 ## Quick start
 
