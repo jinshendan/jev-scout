@@ -8,7 +8,7 @@ Track implementation in [M1](https://github.com/jinshendan/jev-scout/issues/1), 
 
 **Current scope:** Python 3.11+, standard-library implementation on supported POSIX systems; deterministic rules; read-only local repository inspection; bounded scans, reads, steps, and working context; structured evidence and a human-readable report.
 
-**Delivery:** the first implementation PR includes the CLI, packaging, tests, and CI. The foundation is already on `main`; this branch supplies the runnable baseline. M1 functionality is implemented here, pending review and merge.
+**Delivery:** [PR #5](https://github.com/jinshendan/jev-scout/pull/5) includes the CLI, packaging, tests, and CI. The foundation is already on `main`; the implementation is pending review and merge. The M2a branch builds on this baseline without treating the open PR as merged.
 
 ```sh
 scout investigate --repo PATH --task TEXT --output DIR \
@@ -30,23 +30,40 @@ M1 is a rule baseline for investigation. It does not resolve issues, establish c
 
 ## M2 — Jev integration
 
-**Planned:** add Jev behind the decision-policy interface while keeping evidence collection and solver interfaces separate.
+**In progress:** add Jev behind the decision-policy interface while keeping evidence collection and solver interfaces separate. M2 is split into focused increments; a working adapter alone does not complete the milestone.
 
-Deliverables:
+### M2a — Typed candidate selection and accounting
 
-- A typed Jev policy adapter with explicit configuration and model-version recording.
-- Narrow questions over concrete candidates, with separately validated confidence handling.
-- Provider usage, latency, retries, and fallback accounting; credentials remain outside artifacts.
-- A versioned evidence contract and inspectable request payloads.
+**Current review scope:** an optional standard-library adapter to the official TypeSafe endpoint, with the offline rule policy still the default. This is a stacked change on M1, on `feat/jev-decision-policy`.
+
+Implemented in this increment:
+
+- One Choice question over all unseen, concrete candidate IDs, task text, and active context.
+- A pinned default model, configurable confidence floor, and environment-only credentials.
+- Request/response byte limits, a provider-call budget, socket-operation timeout, and no automatic retries.
+- Local closed-choice validation and explicit rule fallback for invalid, unavailable, uncertain, or over-budget requests.
+- Schema 2 artifacts with inspectable payloads, decision traces, model versions, latency, and nullable provider token counts.
+- Controlled HTTP fixture tests for the wire contract and failure paths without credentials.
+
+Acceptance checks: the offline baseline remains runnable; unknown IDs cannot execute actions; source observations survive fallback; invalid responses and provider limits produce visible traces; keys and error bodies stay out of artifacts.
+
+An authenticated live-provider run has not been validated. M2a provides a testable adapter contract, not a measured improvement over rules. See the [Jev policy guide](jev-policy.md) and [ADR 0002](adr/0002-typed-jev-decisions.md).
+
+### Remaining M2 work
+
+The following remain planned:
+
 - Requests for additional evidence and recovery of context-evicted observations.
-- Revision checks, partial-result handling, and links between investigation traces and subsequent work.
-- Provider-neutral policy boundaries that preserve evidence ownership and provenance.
+- Adaptive candidate generation with explicit coverage and revision checks.
+- Reproducible rule-versus-Jev comparisons on the same sources, candidates, limits, and evidence contract.
+- Credentialed provider validation and reporting of model behavior and actual usage.
+- Trace links between investigations and subsequent work.
 
 Exit criterion: a policy comparison uses the same source inputs, candidates, limits, and evidence contract with both the rule policy and Jev. Invalid or unavailable provider responses have an explicit fallback. No benchmark benefit is assumed.
 
 ## M3 — Fixed solver and controlled evaluation
 
-**Planned:** introduce a model-driven investigation policy and compare it with M1 under a fixed LLM solver and reproducible evaluation environment.
+**Planned:** connect investigation to a fixed LLM repair solver and compare policies under a reproducible evaluation environment.
 
 Deliverables:
 
