@@ -52,7 +52,7 @@ See the [architecture document](docs/architecture.md), [evidence decision](docs/
 | M3 — Repair and evaluation | Fixed downstream solver, executable verification, paired experiments | Does investigation improve the success–cost tradeoff end to end? |
 | M4 — Repository memory | Version-aware reuse, invalidation, chronological evaluation | When does accumulated experience help, and when should it be ignored? |
 
-The runnable M1 baseline is available in [PR #5](https://github.com/jinshendan/jev-scout/pull/5). The current [M2a branch](https://github.com/jinshendan/jev-scout/tree/feat/jev-decision-policy) builds on it; its review must be considered alongside the baseline. Each milestone is delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
+The runnable M1 baseline is available in [PR #5](https://github.com/jinshendan/jev-scout/pull/5). [M2a PR #6](https://github.com/jinshendan/jev-scout/pull/6) builds on it; its review must be considered alongside the baseline. Try the full implementation on the [M2a branch](https://github.com/jinshendan/jev-scout/tree/feat/jev-decision-policy). Each milestone is delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
 
 ## Quick start
 
