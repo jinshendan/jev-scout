@@ -49,17 +49,42 @@ Acceptance checks: the offline baseline remains runnable; unknown IDs cannot exe
 
 An authenticated live-provider run has not been validated. M2a provides a testable adapter contract, not a measured improvement over rules. See the [Jev policy guide](jev-policy.md) and [ADR 0002](adr/0002-typed-jev-decisions.md).
 
+### M2b — Explicit recovery and frozen policy comparisons
+
+**Implemented in this increment:** recover retained observations by ID and compare two independent policy arms over one bounded capture. See the [recovery guide](evidence-recovery.md), [comparison guide](policy-comparison.md), and [ADR 0003](adr/0003-recovery-and-frozen-comparisons.md).
+
+**Delivery:** [PR #7](https://github.com/jinshendan/jev-scout/pull/7).
+
+```sh
+scout recover --evidence PATH --repo PATH --observation ID --output DIR \
+  --max-context-chars N
+scout compare --repo PATH --task TEXT --output DIR \
+  --max-steps N --max-context-chars N --challenger rule
+```
+
+Delivered scope:
+
+- Bounded import of schema 1 or 2 evidence and explicit repository selection.
+- Retained historical records with hash, span, and excerpt checks; only matching current records enter bounded context.
+- A single captured frontier and source content shared by rule and challenger arms, with separate policy state and traces.
+- Snapshot identity, separate checkout revalidation, setup and arm timing, and provider/fallback accounting.
+- Offline rule-versus-rule sanity comparisons; explicit `--challenger jev` for credentialed comparisons.
+
+Acceptance checks: evicted observations can be requested without losing their original excerpt; changed, unavailable, or tampered excerpts cannot enter active context; the artifact's repository metadata cannot widen source access; two arms read the same captured source even if the checkout changes; frozen evidence never claims live-source validity; unknown provider usage stays unknown.
+
+This increment provides comparison mechanics, not live Jev validation or a policy-quality result. Sequential capture is not an atomic repository snapshot. Recovery is manual and does not resume the investigation or generate additional candidates.
+
 ### Remaining M2 work
 
 The following remain planned:
 
-- Requests for additional evidence and recovery of context-evicted observations.
+- Policy-requested additional evidence and automatic recovery of context-evicted observations.
 - Adaptive candidate generation with explicit coverage and revision checks.
-- Reproducible rule-versus-Jev comparisons on the same sources, candidates, limits, and evidence contract.
+- Real rule-versus-Jev rollouts using the shared-input harness and a disclosed task set.
 - Credentialed provider validation and reporting of model behavior and actual usage.
 - Trace links between investigations and subsequent work.
 
-Exit criterion: a policy comparison uses the same source inputs, candidates, limits, and evidence contract with both the rule policy and Jev. Invalid or unavailable provider responses have an explicit fallback. No benchmark benefit is assumed.
+Exit criterion: publish credentialed rule-versus-Jev comparisons using the same source inputs, candidates, limits, and evidence contract, with reported provider behavior and usage. Invalid or unavailable provider responses have an explicit fallback. Inspectable traces must support evidence expansion and links to subsequent work. No benchmark benefit is assumed.
 
 ## M3 — Fixed solver and controlled evaluation
 

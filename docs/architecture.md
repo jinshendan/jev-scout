@@ -1,6 +1,6 @@
 # Jev Scout architecture
 
-Jev Scout investigates a repository and produces inspectable evidence before a coding agent attempts a change. M1 implements the accepted evidence contract as a read-only, offline, deterministic rule baseline. M2a adds an optional Jev candidate selector. Both use Python 3.11+ and the standard library; neither produces a repair.
+Jev Scout investigates a repository and produces inspectable evidence before a coding agent attempts a change. M1 implements a read-only, offline rule baseline. M2a adds an optional Jev candidate selector; M2b adds explicit evidence recovery and shared-input policy comparisons. The runtime uses Python 3.11+ and the standard library. It does not produce a repair.
 
 The design separates evidence collection, bounded working context, and the policy that chooses what to inspect next. Provider-specific behavior belongs behind a policy adapter; evidence ownership and source attribution stay local.
 
@@ -34,7 +34,7 @@ bounded scan --> inspection candidates
 
 Candidates identify concrete paths, spans, and expected SHA-256 values. The policy returns a candidate ID, `None` to stop, or a typed `PolicyDecision` with trace metadata. Existing policies returning IDs remain compatible. The investigator validates the selected ID against the current frontier before executing a read.
 
-Discovery ranks filename and content keyword matches once and constructs a fixed frontier. The rule policy selects deterministically. Jev can use the task and active context to choose a different next excerpt, but it cannot create an action or discover a new candidate. Adaptive search and context recovery remain later M2 work. The observations support a handoff for a person or a future solver.
+Discovery ranks filename and content keyword matches once and constructs a fixed frontier. The rule policy selects deterministically. Jev can use the task and active context to choose a different next excerpt, but it cannot create an action or discover a new candidate. A separate recovery command projects validated historical observations into context. Automatic recovery and adaptive search remain later M2 work. The observations support a handoff for a person or a future solver.
 
 The offline CLI remains:
 
@@ -45,6 +45,17 @@ scout investigate --repo PATH --task TEXT --output DIR \
 
 Add `--policy jev` to enable remote selection. The [Jev policy guide](jev-policy.md) defines configuration, transmitted data, provider contract, and fallback behavior. The implementation and its tests define argument defaults, schema, ranking behavior, and the precise limits applied to scans and reads.
 
+Two additional commands operate at explicit boundaries:
+
+```sh
+scout recover --evidence PATH --repo PATH --observation ID --output DIR \
+  --max-context-chars N
+scout compare --repo PATH --task TEXT --output DIR \
+  --max-steps N --max-context-chars N --challenger rule
+```
+
+Recovery reads a bounded import and checks requested observations against the explicit repository. Comparison discovers and captures inputs once, then runs independent rule and challenger policies sequentially over the same frozen source. Selecting `--challenger jev` uses the same provider limits and opt-in contract as investigation.
+
 ## Implementation map
 
 | Module | Responsibility |
@@ -53,6 +64,8 @@ Add `--policy jev` to enable remote selection. The [Jev policy guide](jev-policy
 | `repository.py` | Directory-relative source reads, bounded discovery, lexical ranking, qualified-symbol windows |
 | `investigator.py` | Action loop, source validity, context projection, ordered events, output artifacts |
 | `jev.py` | Bounded TypeSafe HTTP requests, closed-choice validation, rule fallback, decision metadata |
+| `recovery.py` | Bounded evidence import, source and excerpt revalidation, recovered context and reports |
+| `comparison.py` | Shared snapshot capture, independent policy arms, timing, diagnostics, and checkout revalidation |
 | `cli.py` | Argument parsing, user-facing errors, and run summary |
 
 The runtime has no third-party dependencies. Jev is replaceable; persistent repository memory and an LLM solver remain future components.
@@ -91,6 +104,24 @@ Credentials, authorization headers, raw provider errors, and exception strings a
 
 Stored observations are excerpts from an investigation, not a complete archive of the repository. Reading a source file later may return different content. Evidence recovery means inspecting a preserved observation and locating its source. It does not imply automatic run resumption, reproduction of a model answer, or replay of arbitrary tool side effects.
 
+### Recovery provenance
+
+`scout recover` accepts investigation schema 1 or 2, capped at 16 MiB and 100 observations. The import is data, not permission to choose a repository: only `--repo` controls source access. Requested records retain their original text and attribution, and the recovery bundle records the origin artifact's SHA-256.
+
+Recovery checks each requested source through the existing safe-read boundary, then checks its hash, span, and recorded excerpt/truncation against current text. Changed, unavailable, or mismatched excerpts remain visible as historical records but cannot enter active context. Matching records enter the same bounded FIFO context projection used by investigation. The artifact hash links bytes; it does not prove authorship or authenticate the original investigator. See [evidence recovery](evidence-recovery.md).
+
+### Frozen comparison provenance
+
+`scout compare` runs discovery once and captures full text only for the retained frontier, with a 32 MiB memory cap. Each captured file must match the candidate's expected SHA-256 before either arm starts. Both arms share the task, candidates, captured read content, and limits, but receive separate policy state, contexts, and output directories.
+
+The snapshot ID is a canonical hash of the task, relative candidates, source hashes and byte counts, limits, and implementation version. Absolute roots and timestamps are excluded. Capture is bounded and sequential; it does not claim an atomic whole-repository state or a Git revision.
+
+Full captured source remains in process memory only. The persisted manifest and selected excerpts do not reconstruct unobserved captured content, so later reproduction also requires the original permitted repository revision.
+
+Frozen arm bundles use schema 2 with `source_mode: "frozen"`, a `snapshot_id`, and observation validity `matched_frozen_snapshot`. Observations record `checked_snapshot_sha256` and leave `current_sha256` null. They describe matching captured content, even if the original checkout changes during either arm. After both arms, a separate check labels the checkout's current relationship to captured hashes. A source hyperlink refers to the explicit checkout, which may have changed after capture; the recorded excerpt remains the observed content.
+
+`comparison.json` records discovery/capture time, whole-arm time, total comparison time through summary construction, provider accounting, and behavioral diagnostics. Total time excludes publication of the final summary files. Same-position action agreement and observed-candidate overlap do not measure localization quality, repair success, or savings. Controlled fixture transports are identified separately from real provider calls. See [policy comparisons](policy-comparison.md) and [ADR 0003](adr/0003-recovery-and-frozen-comparisons.md).
+
 ## Bounded context and work
 
 The working-context budget bounds the text selected for the next consumer. It does not promise that every output artifact fits in the same limit. Evidence retention and context inclusion are separate decisions: evicting an observation from working context should not silently discard its retained original.
@@ -115,7 +146,7 @@ The confidence floor is a configurable control, with a default of `0.0`. It is n
 
 Keep successful observations when a later inspection fails. Disclose the affected source or action rather than presenting an empty success. A partial result should expose gaps so a later investigator can broaden its search. Fatal setup or artifact-write errors must remain distinguishable from a completed investigation with no useful candidates.
 
-Later M2 work should support evidence expansion and context recovery. A future solver should be able to request additional evidence or inspect elsewhere. Restricting a solver to an incomplete candidate set can turn a recoverable localization miss into an unavoidable repair failure.
+Explicit recovery now supports rebuilding a context from retained observation IDs. Later M2 work should support policy-requested recovery, evidence expansion, and live provider validation. A future solver should be able to request additional evidence or inspect elsewhere. Restricting a solver to an incomplete candidate set can turn a recoverable localization miss into an unavoidable repair failure.
 
 ## Language and cache limitations
 

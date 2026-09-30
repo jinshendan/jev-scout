@@ -69,6 +69,23 @@ class ScoutTests(unittest.TestCase):
         self.assertEqual(len(bundle["observations"]), 1)
         self.assertEqual(len(bundle["deferred_candidate_ids"]), 2)
 
+    def test_invalid_budget_types_fail_before_opening_sources_or_creating_output(self):
+        for name in ("max_steps", "max_context_chars"):
+            for value in (0, -1, True, False, 1.5, float("inf"), float("nan"), "2", None):
+                with self.subTest(name=name, value=value):
+                    with patch(
+                        "jev_scout.investigator.SafeRepository",
+                        side_effect=AssertionError(
+                            "Invalid budgets must not open source repositories."
+                        ),
+                    ) as repository:
+                        with self.assertRaisesRegex(
+                            ValueError, "budgets must be positive integers"
+                        ):
+                            investigate(self.repo, "cancel", self.output, **{name: value})
+                    repository.assert_not_called()
+                    self.assertFalse(self.output.exists())
+
     def test_context_eviction_preserves_raw_evidence(self):
         self.source("alpha.cc", "void cancel_alpha() { cleanup(); }\n")
         self.source("beta.cc", "void cancel_beta() { cleanup(); }\n")

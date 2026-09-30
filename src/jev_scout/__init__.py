@@ -1,5 +1,6 @@
 """A bounded, read-only code investigation harness."""
 
+from .comparison import ComparisonResult, compare
 from .investigator import investigate
 from .jev import JevPolicy
 from .models import (
@@ -11,16 +12,22 @@ from .models import (
     ProviderAttempt,
     RulePolicy,
 )
+from .recovery import RecoveryResult, recover
+from .version import __version__
 
 __all__ = [
+    "__version__",
     "ActionCandidate",
+    "ComparisonResult",
     "DecisionState",
     "InvestigationResult",
     "JevPolicy",
     "Policy",
     "PolicyDecision",
     "ProviderAttempt",
+    "RecoveryResult",
     "RulePolicy",
     "investigate",
+    "compare",
+    "recover",
 ]
-__version__ = "0.2.0"

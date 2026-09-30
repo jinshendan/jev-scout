@@ -18,6 +18,22 @@ Treat a truncated discovery frontier separately: filesystem enumeration order ca
 
 These checks verify implementation contracts. They do not establish candidate accuracy on real issues.
 
+## M2b recovery and shared-input checks
+
+Recovery checks import bounds and schema validation, explicit source scope, preserved historical text, and separation of retained evidence from active context. Exercise current, changed, unavailable, malformed-span, and excerpt-mismatch records. Confirm that a small context budget can evict or truncate a recovered projection while retaining the requested original record. The origin artifact hash links the input bytes; it does not authenticate them.
+
+The comparison harness creates a bounded frozen input before either arm starts. Use an offline rule-versus-rule run as a sanity check, then controlled injected policies to test differing choices, fallback, unknown usage, and source mutation during an arm. Injected transports are implementation fixtures and must be labeled as such; they are not live Jev experiments.
+
+Check that both arms receive identical task text, candidate frontier, expected source hashes, captured read content, and budgets. They have fresh policy state and separate contexts. A changed checkout must not change an arm's observed snapshot text or appear as `current_at_final_check` in frozen evidence. Recheck the original checkout separately after both arms.
+
+Record the snapshot manifest and ID, discovery/capture limits, exclusions, source mode, implementation version, requested and actual backends, provider attempts, fallback reasons, and reported or unknown usage. Capture is sequential and bounded; it does not identify an atomic repository state. Snapshot IDs exclude absolute roots and timestamps, so equivalent relocated fixtures can be compared without asserting byte-identical run metadata.
+
+The current harness reports same-position action agreement and observed-candidate overlap. These diagnose policy behavior. High agreement can reflect identical rules or repeated fallback; low agreement can reflect useful or harmful choices. Neither is a correctness, localization-quality, repair-success, or savings metric. Recovery is a separate command and is not a treatment inside the current comparison.
+
+Discovery/capture time, whole-arm time, and total comparison time through summary construction are reported separately. Total time includes output preparation and checkout revalidation and excludes publication of the final comparison summary files. Arms run sequentially, so ordering, OS caches, and provider load may affect latency. Shared capture cost is paid once by this harness; report the accounting convention before deriving per-arm cost. Preserve unknown provider usage rather than treating a failed call as free. Without live calls, prices, and task outcomes, the harness cannot establish monetary savings.
+
+Use the [comparison guide](policy-comparison.md) for artifacts and opt-in behavior. Credentialed provider validation and a disclosed real task set remain M2 work; the fixed repair solver and executable success oracle remain M3 work.
+
 ## Frozen end-to-end track — planned for M3
 
 Pin repository revisions, dataset revision and instance IDs, container digests, model versions, prompts, tool configuration, pricing date, random seeds, timeout rules, and total budgets. Keep the solver fixed when comparing investigation methods. Each arm receives the same permitted task information.
