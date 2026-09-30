@@ -156,3 +156,14 @@ The project is implemented and documented in English. Small contributions with c
 ## License
 
 [MIT](LICENSE). Jev Scout is an independent project and is not affiliated with TypeSafe AI. The project license does not cover external model services or grant access to model weights.
+
+## Implementation reviews
+
+The runnable implementation is delivered in focused review branches. Each PR includes its behavior, validation, and remaining work.
+
+| Review | Scope | Dependency |
+| --- | --- | --- |
+| [M1 — PR #5](https://github.com/jinshendan/jev-scout/pull/5) | Offline evidence investigator, CLI, source validation, packaging, and CI | Project foundation on `main` |
+| [M2a — PR #6](https://github.com/jinshendan/jev-scout/pull/6) | Opt-in typed Jev selection, bounded requests, explicit rule fallback, and decision accounting | M1; review and merge PR #5 first |
+
+Try the full current implementation using the [M2a branch quick start](https://github.com/jinshendan/jev-scout/tree/feat/jev-decision-policy#quick-start). Authenticated provider validation and policy-quality comparisons remain open M2 work.
