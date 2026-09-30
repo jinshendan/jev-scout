@@ -7,9 +7,6 @@ a defect, determine a root cause, or propose a verified fix.
 
 ## Run an investigation
 
-The executable CLI is delivered in the M1 implementation PR. Until it is merged,
-use the `feat/local-evidence-baseline` branch and its installation instructions.
-
 After installing Jev Scout as described in the repository README, run this from
 the repository root:
 

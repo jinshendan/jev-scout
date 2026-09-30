@@ -8,7 +8,7 @@ Track implementation in [M1](https://github.com/jinshendan/jev-scout/issues/1), 
 
 **Current scope:** Python 3.11+, standard-library implementation on supported POSIX systems; deterministic rules; read-only local repository inspection; bounded scans, reads, steps, and working context; structured evidence and a human-readable report.
 
-**Delivery:** [PR #5](https://github.com/jinshendan/jev-scout/pull/5) includes the CLI, packaging, tests, and CI. The foundation is already on `main`; the implementation is pending review and merge. The M2a branch builds on this baseline without treating the open PR as merged.
+**Delivery:** Merged in [PR #5](https://github.com/jinshendan/jev-scout/pull/5). The CLI, packaging, tests, and CI are available on `main`.
 
 ```sh
 scout investigate --repo PATH --task TEXT --output DIR \
@@ -34,7 +34,7 @@ M1 is a rule baseline for investigation. It does not resolve issues, establish c
 
 ### M2a — Typed candidate selection and accounting
 
-**Current review scope:** an optional standard-library adapter to the official TypeSafe endpoint, with the offline rule policy still the default. This is a stacked change on M1, on `feat/jev-decision-policy`.
+**Delivered scope:** an optional standard-library adapter to the official TypeSafe endpoint, with the offline rule policy still the default. Merged in [PR #6](https://github.com/jinshendan/jev-scout/pull/6) and available on `main`.
 
 Implemented in this increment:
 

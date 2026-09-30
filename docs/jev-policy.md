@@ -2,7 +2,7 @@
 
 M2a adds a Jev policy to the existing read-only investigator. The default remains `--policy rule`, which runs offline without credentials. Jev selects an existing candidate ID; the runtime owns every read, budget, and retained observation.
 
-The adapter is implemented for review, stacked on [M1 PR #5](https://github.com/jinshendan/jev-scout/pull/5). Controlled HTTP fixtures validate our contract and failure paths. An authenticated live-provider run and a policy-quality comparison have not been performed.
+The adapter is available on `main`, delivered in [PR #6](https://github.com/jinshendan/jev-scout/pull/6) on top of the [M1 baseline](https://github.com/jinshendan/jev-scout/pull/5). Controlled HTTP fixtures validate our contract and failure paths. An authenticated live-provider run and a policy-quality comparison have not been performed.
 
 ## Enable the policy
 

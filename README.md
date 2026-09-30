@@ -4,7 +4,7 @@
 
 Jev Scout explores a repository, keeps source-backed observations recoverable, and hands bounded working context alongside inspectable evidence to a developer or a coding agent. Its research goal is to determine when a decision model such as Jev can improve the cost and reliability of code investigation.
 
-**Status:** Alpha. M1's offline investigator is implemented in [PR #5](https://github.com/jinshendan/jev-scout/pull/5), pending merge. This stacked implementation adds **M2a: an optional typed Jev candidate selector**, with explicit rule fallback and decision accounting. Live provider validation, adaptive evidence recovery, and policy comparisons remain unfinished. No efficiency or repair-success claims have been established.
+**Status:** Alpha. M1's offline investigator and **M2a: an optional typed Jev candidate selector** are available on `main`, with explicit rule fallback and decision accounting. Live provider validation, adaptive evidence recovery, and policy comparisons remain unfinished. No efficiency or repair-success claims have been established.
 
 [Quick start](#quick-start) · [Jev policy](docs/jev-policy.md) · [Architecture](docs/architecture.md) · [Demo](docs/demo.md) · [Roadmap](docs/roadmap.md) · [Evaluation](docs/evaluation.md)
 
@@ -47,19 +47,19 @@ See the [architecture document](docs/architecture.md), [evidence decision](docs/
 
 | Milestone | Deliverable | Acceptance question |
 | --- | --- | --- |
-| M1 — Local evidence baseline | Implemented, in review: read-only investigation, bounded context, raw events, evidence bundle, source-linked report | Can a run preserve and expose useful source evidence reproducibly? |
-| M2 — Jev decision backend | M2a in review: typed selection, explicit fallback, usage accounting. Recovery and comparisons remain planned. | Does Jev improve candidate selection over the rule baseline? |
+| M1 — Local evidence baseline | Available on main: read-only investigation, bounded context, raw events, evidence bundle, source-linked report | Can a run preserve and expose useful source evidence reproducibly? |
+| M2 — Jev decision backend | M2a available on main: typed selection, explicit fallback, usage accounting. Recovery and comparisons remain planned. | Does Jev improve candidate selection over the rule baseline? |
 | M3 — Repair and evaluation | Fixed downstream solver, executable verification, paired experiments | Does investigation improve the success–cost tradeoff end to end? |
 | M4 — Repository memory | Version-aware reuse, invalidation, chronological evaluation | When does accumulated experience help, and when should it be ignored? |
 
-The runnable M1 baseline is available in [PR #5](https://github.com/jinshendan/jev-scout/pull/5). [M2a PR #6](https://github.com/jinshendan/jev-scout/pull/6) builds on it; its review must be considered alongside the baseline. Try the full implementation on the [M2a branch](https://github.com/jinshendan/jev-scout/tree/feat/jev-decision-policy). Each milestone is delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
+The runnable M1 baseline and M2a adapter were delivered in [PR #5](https://github.com/jinshendan/jev-scout/pull/5) and [PR #6](https://github.com/jinshendan/jev-scout/pull/6). Both are available on `main`. Each milestone is delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
 
 ## Quick start
 
-Requires **Python 3.11+ on macOS or Linux**. The runtime uses the Python standard library. There is no PyPI release yet; install from a checkout. During review, the full current implementation is on `feat/jev-decision-policy`.
+Requires **Python 3.11+ on macOS or Linux**. The runtime uses the Python standard library. There is no PyPI release yet; install from a checkout.
 
 ```sh
-git clone --branch feat/jev-decision-policy https://github.com/jinshendan/jev-scout.git
+git clone https://github.com/jinshendan/jev-scout.git
 cd jev-scout
 python3 -m venv .venv
 source .venv/bin/activate
@@ -156,14 +156,3 @@ The project is implemented and documented in English. Small contributions with c
 ## License
 
 [MIT](LICENSE). Jev Scout is an independent project and is not affiliated with TypeSafe AI. The project license does not cover external model services or grant access to model weights.
-
-## Implementation reviews
-
-The runnable implementation is delivered in focused review branches. Each PR includes its behavior, validation, and remaining work.
-
-| Review | Scope | Dependency |
-| --- | --- | --- |
-| [M1 — PR #5](https://github.com/jinshendan/jev-scout/pull/5) | Offline evidence investigator, CLI, source validation, packaging, and CI | Project foundation on `main` |
-| [M2a — PR #6](https://github.com/jinshendan/jev-scout/pull/6) | Opt-in typed Jev selection, bounded requests, explicit rule fallback, and decision accounting | M1; review and merge PR #5 first |
-
-Try the full current implementation using the [M2a branch quick start](https://github.com/jinshendan/jev-scout/tree/feat/jev-decision-policy#quick-start). Authenticated provider validation and policy-quality comparisons remain open M2 work.

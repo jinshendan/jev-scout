@@ -1,6 +1,6 @@
 # ADR 0002: Typed Jev decisions with explicit rule fallback
 
-- Status: Accepted for M2a implementation; pending review
+- Status: Accepted and implemented for M2a
 - Date: 2026-09-30
 - Scope: Candidate selection and provider accounting
 
