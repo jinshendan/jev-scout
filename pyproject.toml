@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jev-scout"
+version = "0.1.0"
+description = "A bounded, evidence-first runtime for code investigation."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Shendan Jin"}]
+keywords = ["coding-agent", "code-search", "evidence", "jev", "context-management"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["build>=1.2,<2", "ruff>=0.13,<1"]
+
+[project.scripts]
+scout = "jev_scout.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/jinshendan/jev-scout"
+Repository = "https://github.com/jinshendan/jev-scout"
+Issues = "https://github.com/jinshendan/jev-scout/issues"
+Architecture = "https://github.com/jinshendan/jev-scout/blob/main/docs/architecture.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
