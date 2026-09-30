@@ -2,11 +2,11 @@
 
 **An evidence-first runtime for investigating code under a bounded budget.**
 
-Jev Scout explores a repository, keeps source-backed observations recoverable, and hands a compact evidence bundle to a developer or a coding agent. Its research goal is to determine when a decision model such as Jev can improve the cost and reliability of code investigation.
+Jev Scout explores a repository, keeps source-backed observations recoverable, and hands bounded working context alongside inspectable evidence to a developer or a coding agent. Its research goal is to determine when a decision model such as Jev can improve the cost and reliability of code investigation.
 
-**Status:** project foundation. The first implementation milestone is a local, read-only, deterministic baseline. Jev integration and automated repair are subsequent milestones; no efficiency or repair-success claims have been established.
+**Status:** M1 implementation, alpha. The local investigator runs offline with a deterministic rule policy. Jev integration and automated repair are subsequent milestones; no efficiency or repair-success claims have been established.
 
-[Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md) · [Evaluation plan](docs/evaluation.md) · [Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start) · [Architecture](docs/architecture.md) · [Demo](docs/demo.md) · [Roadmap](docs/roadmap.md) · [Evaluation](docs/evaluation.md)
 
 ## The problem
 
@@ -21,6 +21,8 @@ Jev Scout treats investigation as a sequence of explicit decisions:
 The runtime keeps the evidence behind those decisions inspectable. A selected file is a lead; an observation is not automatically a root cause; a model's confidence is not a correctness guarantee.
 
 ## Architecture
+
+This is the target architecture. M1 discovers a fixed lexical frontier once and reads selected excerpts; adaptive search and model reasoning are later extensions.
 
 ```mermaid
 flowchart LR
@@ -37,7 +39,7 @@ flowchart LR
 
 **Concrete candidates** carry executable parameters. The decision layer selects a candidate ID rather than inventing shell commands. **Evidence** keeps source locations and content fingerprints. **Working context** is a bounded view of that evidence, so removing an observation from context does not destroy its original record.
 
-The first policy is deterministic and runs without an API key. Jev will be the first remote decision backend behind a replaceable policy interface. This separation provides a meaningful baseline and keeps the project usable when a model is unavailable.
+The first policy is deterministic and runs without an API key. Jev is planned as the first remote decision backend behind the `Policy.choose(state, candidates)` interface. This separation provides a meaningful baseline and keeps the project usable when a model is unavailable.
 
 See the [architecture document](docs/architecture.md) and [first design decision](docs/adr/0001-evidence-first-runtime.md) for boundaries and tradeoffs.
 
@@ -52,7 +54,44 @@ See the [architecture document](docs/architecture.md) and [first design decision
 
 The runnable M1 baseline is available in [PR #5](https://github.com/jinshendan/jev-scout/pull/5). See the [implementation branch and quick start](https://github.com/jinshendan/jev-scout/tree/feat/local-evidence-baseline#quick-start) to try it during review. Each later milestone will be delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
 
-## What the first implementation will demonstrate
+## Quick start
+
+Requires **Python 3.11+ on macOS or Linux**. The runtime uses the Python standard library. There is no PyPI release yet; install from a checkout. During review, the executable baseline is on `feat/local-evidence-baseline`.
+
+```sh
+git clone --branch feat/local-evidence-baseline https://github.com/jinshendan/jev-scout.git
+cd jev-scout
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+
+scout investigate \
+  --repo examples/cancellation \
+  --task "Investigate whether Request::cancel removes queued callbacks." \
+  --output .scout/demo \
+  --max-steps 6 \
+  --max-context-chars 1200
+```
+
+Open `.scout/demo/report.md` and compare its citations with the source. The [walkthrough](docs/demo.md) explains what the example can establish.
+
+| Artifact | What it contains |
+| --- | --- |
+| `report.md` | Source-linked excerpts, coverage limits, and stopping reason |
+| `evidence.json` | Versioned observations, source fingerprints, candidates, and active context |
+| `events.jsonl` | Ordered decisions, reads, context changes, and source revalidation |
+
+Choose a fresh output directory **outside the repository being investigated**. In this example, `.scout/demo` is outside `examples/cancellation`. For another repository:
+
+```sh
+scout investigate --repo /path/to/repository \
+  --task "Trace the cancellation path for Request::cancel" \
+  --output /tmp/scout-investigation-001
+```
+
+`--max-steps` bounds snippet actions, including skipped actions. `--max-context-chars` bounds active excerpt characters, not tokens or the size of retained artifacts. The result also records fixed discovery, source-read, and candidate limits. Reuse an observation by its ID in `evidence.json`; automatic run resumption is future work.
+
+## Implemented in M1
 
 - Local text-based discovery and bounded snippet reads.
 - Explicit action candidates and a replaceable policy interface.
@@ -61,7 +100,19 @@ The runnable M1 baseline is available in [PR #5](https://github.com/jinshendan/j
 - English Markdown and JSON handoff artifacts.
 - A small [C++ cancellation scenario](examples/cancellation/README.md) for inspecting the workflow.
 
-This milestone will not provide semantic C++ analysis, automatic diagnosis, code edits, test execution, or measured token savings. Those boundaries are part of the experiment design, not hidden capabilities.
+M1 is a lexical source inspector. It does not provide semantic C++ analysis, automatic diagnosis, code edits, test execution, or measured token savings. Working-context eviction retains the original recorded excerpt; it does not archive the entire source file.
+
+## Development
+
+```sh
+python -m pip install -e '.[dev]'
+ruff check .
+ruff format --check .
+python -m unittest discover -s tests -v
+python -m build
+```
+
+CI validates the package and CLI on Linux and macOS. Tests cover source-access boundaries, budgets, changed source, deterministic selection, and recoverable context. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development and PR workflow.
 
 ## Research discipline
 

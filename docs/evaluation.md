@@ -14,6 +14,8 @@ Use local fixture repositories with known text, unrelated files, repeated symbol
 
 Timestamps and other run metadata may differ between repeated runs. Compare meaningful investigation content, not byte-for-byte identity of every artifact. M1 requires output outside the source repository. Use fresh output directories when checking that investigation leaves source content unchanged.
 
+Treat a truncated discovery frontier separately: filesystem enumeration order can affect which entries enter a bounded prefix. A selected file provides one bounded window in M1, so file coverage must not be confused with symbol or causal-chain coverage.
+
 These checks verify implementation contracts. They do not establish candidate accuracy on real issues.
 
 ## Frozen end-to-end track — planned for M3

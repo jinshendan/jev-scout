@@ -2,11 +2,13 @@
 
 The milestones separate an inspectable baseline from later agent behavior. Each milestone describes its deliverable and exit criteria; future components and performance benefits are not assumed to exist.
 
+Track implementation in [M1](https://github.com/jinshendan/jev-scout/issues/1), the Jev adapter in [M2](https://github.com/jinshendan/jev-scout/issues/2), controlled repair evaluation in [M3](https://github.com/jinshendan/jev-scout/issues/3), and repository memory in [M4](https://github.com/jinshendan/jev-scout/issues/4).
+
 ## M1 — Offline evidence investigator
 
 **Current scope:** Python 3.11+, standard-library implementation on supported POSIX systems; deterministic rules; read-only local repository inspection; bounded scans, reads, steps, and working context; structured evidence and a human-readable report.
 
-**Delivery:** the first implementation PR. The foundation commit documents the contract and evaluation plan; the implementation branch adds the CLI, packaging, tests, and CI.
+**Delivery:** the first implementation PR includes the CLI, packaging, tests, and CI. The foundation is already on `main`; this branch supplies the runnable baseline. M1 functionality is implemented here, pending review and merge.
 
 ```sh
 scout investigate --repo PATH --task TEXT --output DIR \
