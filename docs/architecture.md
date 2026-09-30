@@ -1,6 +1,6 @@
 # Jev Scout architecture
 
-Jev Scout is designed to investigate a repository and produce inspectable evidence before a coding agent attempts a change. This document defines the accepted M1 contract; the first implementation PR delivers a read-only, offline, deterministic rule baseline in Python 3.11+ using the standard library. It does not call a language model or produce a repair.
+Jev Scout investigates a repository and produces inspectable evidence before a coding agent attempts a change. M1 implements the accepted evidence contract as a read-only, offline, deterministic rule baseline in Python 3.11+ using the standard library. It does not call a language model or produce a repair.
 
 The design separates evidence collection, bounded working context, and the policy that chooses what to inspect next. Provider-specific behavior belongs behind a future policy adapter, not in evidence ownership or source attribution.
 
@@ -39,6 +39,17 @@ scout investigate --repo PATH --task TEXT --output DIR \
 
 The implementation and its tests define argument defaults, schema, ranking behavior, and the precise limits applied to scans and reads.
 
+## Implementation map
+
+| Module | Responsibility |
+| --- | --- |
+| `models.py` | Immutable candidates, task state, context entries, policy interface, result paths |
+| `repository.py` | Directory-relative source reads, bounded discovery, lexical ranking, qualified-symbol windows |
+| `investigator.py` | Action loop, source validity, context projection, ordered events, output artifacts |
+| `cli.py` | Argument parsing, user-facing errors, and run summary |
+
+The runtime has no third-party dependencies. Provider adapters and persistent repository memory remain outside M1.
+
 ## Boundaries and contracts
 
 | Boundary | Responsibility |
@@ -70,6 +81,8 @@ Stored observations are excerpts from an investigation, not a complete archive o
 The working-context budget bounds the text selected for the next consumer. It does not promise that every output artifact fits in the same limit. Evidence retention and context inclusion are separate decisions: evicting an observation from working context should not silently discard its retained original.
 
 Step, scan, and read limits bound investigation work. A limit must be visible in the result, with an explicit stopping reason or partial-result limitation. Empty candidates, unreadable files, unsupported content, and incomplete inspection are valid outcomes to disclose; they do not prove that a task has no solution.
+
+Discovery uses bounded directory iteration. When the entry limit is reached, only the enumerated prefix can be ranked; its coverage can depend on filesystem enumeration order. Full, unchanged fixture scans have stable decisions, while a truncated scan is not a cross-platform coverage guarantee. M1 creates one inspection window per matched file, so reading a file does not establish that all its relevant functions were inspected.
 
 A ranking score estimates investigative relevance. It does not certify a diagnosis, identify every necessary file, or predict that a patch will pass tests. M1 does not attach an empirically calibrated correctness probability to a candidate score.
 
