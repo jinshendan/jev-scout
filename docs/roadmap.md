@@ -1,5 +1,7 @@
 # Jev Scout roadmap
 
+[English](roadmap.md) · [简体中文](roadmap.zh-CN.md)
+
 The milestones separate an inspectable baseline from later agent behavior. Each milestone describes its deliverable and exit criteria; future components and performance benefits are not assumed to exist.
 
 Track implementation in [M1](https://github.com/jinshendan/jev-scout/issues/1), the Jev adapter in [M2](https://github.com/jinshendan/jev-scout/issues/2), controlled repair evaluation in [M3](https://github.com/jinshendan/jev-scout/issues/3), and repository memory in [M4](https://github.com/jinshendan/jev-scout/issues/4).

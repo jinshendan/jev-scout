@@ -1,5 +1,7 @@
 # Jev Scout
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 **An evidence-first runtime for investigating code under a bounded budget.**
 
 Jev Scout explores a repository, keeps source-backed observations recoverable, and hands bounded working context alongside inspectable evidence to a developer or a coding agent. Its research goal is to determine when a decision model such as Jev can improve the cost and reliability of code investigation.
@@ -59,6 +61,8 @@ The M1 baseline and M2a adapter were delivered in [PR #5](https://github.com/jin
 ## Quick start
 
 Requires **Python 3.11+ on macOS or Linux**. The runtime uses the Python standard library. There is no PyPI release yet; install from a checkout.
+
+The examples retain English task text because the current lexical search extracts ASCII identifiers from the task.
 
 ```sh
 git clone https://github.com/jinshendan/jev-scout.git
@@ -193,7 +197,7 @@ Related work already covers repository maps, inexpensive exploration, and reposi
 
 ## Contributing
 
-The project is implemented and documented in English. Small contributions with clear behavior and validation are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md); substantial design choices belong in [architecture decision records](docs/adr/).
+Project introductions are available in English and Simplified Chinese and maintained together. Code, comments, CLI output, API/schema names, runtime-authored report text, and technical reference guides use English; source excerpts retain their original language. Small contributions with clear behavior and validation are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md); substantial design choices belong in [architecture decision records](docs/adr/).
 
 ## License
 
