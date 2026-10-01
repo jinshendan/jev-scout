@@ -62,6 +62,12 @@ def _add_investigation_arguments(command: argparse.ArgumentParser):
     command.add_argument("--output", required=True, type=Path)
     command.add_argument("--max-steps", type=int, default=8)
     command.add_argument("--max-context-chars", type=int, default=12000)
+    command.add_argument(
+        "--max-followups",
+        type=int,
+        default=0,
+        help="Maximum generated same-file neighbor candidates, 0-100 (default: disabled).",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -105,13 +111,20 @@ def main(argv: list[str] | None = None) -> int:
                 args.max_steps,
                 args.max_context_chars,
                 challenger_factory=lambda: challenger,
+                max_followups=args.max_followups,
             )
             print(f"Compared two fresh policy runs on snapshot {result.snapshot_id}.")
             print("Action agreement describes behavior, not task quality or repair success.")
         else:
             policy = _make_policy(args, args.policy)
             result = investigate(
-                args.repo, args.task, args.output, args.max_steps, args.max_context_chars, policy
+                args.repo,
+                args.task,
+                args.output,
+                args.max_steps,
+                args.max_context_chars,
+                policy,
+                max_followups=args.max_followups,
             )
             print(
                 f"Collected {result.observations} observations in {result.steps} snippet actions."
