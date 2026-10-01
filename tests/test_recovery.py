@@ -132,8 +132,8 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(recovered["observations"][0]["validity"], "current_at_recovery_check")
         self.assertNotIn("DO_NOT_COPY_PRIVATE_FIELD", (self.output / "recovery.json").read_text())
 
-    def test_both_delivered_investigation_schemas_are_supported(self):
-        for version in (1, 2):
+    def test_all_delivered_investigation_schemas_are_supported(self):
+        for version in (1, 2, 3):
             with self.subTest(version=version):
                 self.bundle["schema_version"] = version
                 self.write_bundle()
@@ -250,7 +250,7 @@ class RecoveryTests(unittest.TestCase):
                 self.assertFalse(self.output.exists())
 
     def test_schema_and_duplicate_observation_ids_are_rejected(self):
-        for version in (True, 0, 3, "2"):
+        for version in (True, 0, 4, "2"):
             with self.subTest(version=version):
                 bundle = json.loads(self.original)
                 bundle["schema_version"] = version

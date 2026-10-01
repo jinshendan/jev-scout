@@ -70,7 +70,7 @@ class AdaptiveComparisonTests(unittest.TestCase):
         with patch("jev_scout.jev._post", side_effect=AssertionError("Network was used.")):
             compare(self.repo, "cancel callback", self.output)
         summary = self.summary()
-        self.assertEqual(summary["schema_version"], 2)
+        self.assertEqual(summary["schema_version"], 3)
         self.assertEqual(summary["snapshot"]["limits"]["max_followups"], 0)
         self.assertEqual(summary["snapshot"]["expansion"]["max_followups"], 0)
         self.assertEqual(summary["agreement"]["positional_action_agreement"], 1.0)

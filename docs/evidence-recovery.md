@@ -18,7 +18,7 @@ scout recover \
 
 Use IDs that exist in your bundle. Repeat `--observation` for each requested record. The output directory must be fresh and outside the investigated repository; use a new directory for every recovery run. `--max-context-chars` defaults to 12,000 and bounds active excerpt characters, not tokens or the full artifact size.
 
-The input must be an investigation `evidence.json` using schema 1 or 2, including a frozen comparison arm's bundle. Frozen validity is historical metadata; recovery still requires a fresh check against the supplied live repository before including an excerpt. Imports are capped at 16 MiB and 100 observations. Invalid schema or records, unknown requested IDs, and unsafe source paths are rejected rather than executed as instructions. A `recovery.json` is a distinct artifact, not another investigation bundle.
+The input must be an investigation `evidence.json` using schema 1, 2, or 3, including a frozen comparison arm's bundle. Frozen validity is historical metadata; recovery still requires a fresh check against the supplied live repository before including an excerpt. Imports are capped at 16 MiB and 100 observations. Invalid schema or records, unknown requested IDs, and unsafe source paths are rejected rather than executed as instructions. A `recovery.json` is a distinct artifact, not another investigation bundle.
 
 ## What is checked
 
@@ -47,6 +47,6 @@ The context budget can evict an earlier recovered projection or truncate a large
 
 The origin hash identifies the imported bytes. It does not prove authorship, authenticity, or that an earlier run really read the source. The importer treats the entire bundle as untrusted data. A forged excerpt that differs from source cannot enter active context, but a matching excerpt is still a source observation rather than a verified diagnosis.
 
-Recovery does not resume a policy, replay a provider request, generate new candidates, or infer whether a task is solved. It does not restore complete source files or any original excerpt content that was never retained. Automatic recovery and evidence expansion remain [M2 work](roadmap.md).
+Recovery does not resume a policy, replay a provider request, generate new candidates, or infer whether a task is solved. It does not restore complete source files or any original excerpt content that was never retained. Version 0.5.0 separately supports opt-in [policy-selected context restoration](policy-context-restoration.md) within an ongoing investigation. That mechanism uses runtime-owned observations from the current run, consumes its action budget, and does not import a previous bundle. Cross-file expansion and links to subsequent work remain [M2 work](roadmap.md).
 
 See the [demo](demo.md), [architecture](architecture.md), and [ADR 0003](adr/0003-recovery-and-frozen-comparisons.md).

@@ -102,17 +102,41 @@ Acceptance checks: failed or hash-mismatched reads cannot seed candidates; gener
 
 This increment expands neighboring evidence only. It does not rescan, discover new files, automatically recover context, resume a run, or add a solver. Excerpts and finite budgets can leave coverage gaps. Live Jev compatibility and task-quality gains remain unvalidated.
 
+### M2d — Policy-selected context restoration
+
+**Implemented in this increment, version 0.5.0:** let either policy select a runtime-generated action that restores an observation evicted from the current run's context. See the [restoration guide](policy-context-restoration.md), [recovery guide](evidence-recovery.md), and [ADR 0005](adr/0005-policy-context-restoration.md).
+
+```sh
+scout investigate --repo PATH --task TEXT --output DIR \
+  --max-steps N --max-context-chars N --max-restores N
+scout compare --repo PATH --task TEXT --output DIR \
+  --max-steps N --max-context-chars N --max-restores N --challenger rule
+```
+
+Delivered scope:
+
+- Opt-in `--max-restores` from 0 through 100, defaulting to zero; its quota counts generated offers rather than successful restorations.
+- At most one concrete `restore_observation` candidate per context-evicted observation from this run, selected through the existing rule/Jev interface.
+- Revalidation of safe source access, expected hash, line span, exact excerpt, and truncation before reusing the original observation ID and text.
+- A shared 100-candidate cap across discovery, follow-ups, and restorations, plus one step budget for every selected read or restoration, including skipped actions.
+- Schema 3 investigation/comparison artifacts with separate read/restoration accounting; explicit recovery imports schemas 1, 2, and 3.
+- Frozen restoration checks against the same captured source as reads, with arm-local observation IDs excluded from semantic action agreement.
+
+Acceptance checks: defaults preserve offline selection behavior; only offered IDs execute; active observations are not duplicated; stale, unavailable, or mismatched source cannot enter context; raw evidence survives restoration or omission; restoration never creates a new observation; quotas and global capacity are enforced; repeat eviction cannot generate another offer; comparison arms do not read live source to restore frozen evidence.
+
+This increment provides bounded recall within an investigation. The rule baseline prioritizes unseen reads before restoration offers; a restored projection can evict another record under the same FIFO budget. Restoration does not resume a previous run, discover new files, produce a repair, or establish a measured quality benefit. Live Jev validation remains pending.
+
 ### Remaining M2 work
 
 The following remain planned:
 
-- Policy-requested cross-file evidence and automatic recovery of context-evicted observations.
+- Policy-requested cross-file evidence with explicit coverage and source-revision checks.
 - Candidate expansion beyond adjacent windows with explicit coverage and revision checks.
 - Real rule-versus-Jev rollouts using the shared-input harness and a disclosed task set.
 - Credentialed provider validation and reporting of model behavior and actual usage.
 - Trace links between investigations and subsequent work.
 
-Exit criterion: publish credentialed rule-versus-Jev comparisons using the same source inputs, initial candidates, expansion rules, limits, and evidence contract, with reported provider behavior and usage. Later menus may depend on each policy's choices and must remain traceable. Invalid or unavailable provider responses have an explicit fallback. Inspectable traces must support evidence expansion and links to subsequent work. No benchmark benefit is assumed.
+Exit criterion: publish credentialed rule-versus-Jev comparisons using the same source inputs, initial candidates, expansion/restoration rules, limits, and evidence contract, with reported provider behavior and usage. Later menus may depend on each policy's choices and must remain traceable. Invalid or unavailable provider responses have an explicit fallback. Inspectable traces must support evidence expansion and links to subsequent work. No benchmark benefit is assumed.
 
 ## M3 — Fixed solver and controlled evaluation
 

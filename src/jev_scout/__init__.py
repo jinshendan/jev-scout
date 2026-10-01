@@ -10,6 +10,8 @@ from .models import (
     Policy,
     PolicyDecision,
     ProviderAttempt,
+    ReadSnippetArgs,
+    RestoreObservationArgs,
     RulePolicy,
 )
 from .recovery import RecoveryResult, recover
@@ -25,6 +27,8 @@ __all__ = [
     "Policy",
     "PolicyDecision",
     "ProviderAttempt",
+    "ReadSnippetArgs",
+    "RestoreObservationArgs",
     "RecoveryResult",
     "RulePolicy",
     "investigate",

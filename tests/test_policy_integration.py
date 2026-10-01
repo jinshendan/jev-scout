@@ -79,7 +79,7 @@ class PolicyIntegrationTests(unittest.TestCase):
         ):
             self.assertEqual(main(self.cli_args()), 0)
         bundle = self.bundle()
-        self.assertEqual(bundle["schema_version"], 2)
+        self.assertEqual(bundle["schema_version"], 3)
         self.assertEqual(bundle["policy_config"]["backend"], "rule")
         self.assertEqual(bundle["policy_accounting"]["provider_attempts"], 0)
         self.assertEqual(bundle["policy_accounting"]["backend_decisions"], {"rule": 3})

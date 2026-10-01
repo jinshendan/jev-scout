@@ -16,10 +16,20 @@ class ReadSnippetArgs:
 
 
 @dataclass(frozen=True)
+class RestoreObservationArgs:
+    observation_id: str
+    path: str
+    start_line: int
+    end_line: int
+    expected_sha256: str
+    max_chars: int = 4000
+
+
+@dataclass(frozen=True)
 class ActionCandidate:
     id: str
     kind: str
-    args: ReadSnippetArgs
+    args: ReadSnippetArgs | RestoreObservationArgs
     score: int
     reasons: tuple[str, ...]
     preview: str

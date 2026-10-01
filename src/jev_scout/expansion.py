@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from .frontier import CandidateRegistry
 from .models import ActionCandidate, ReadSnippetArgs
 from .repository import MAX_CANDIDATES, SourceFile
 
@@ -45,19 +46,25 @@ class FollowupFrontier:
     different IDs to the same span, so comparisons must use semantic action identities.
     """
 
-    def __init__(self, initial_candidates: Sequence[ActionCandidate], max_followups: int = 0):
+    def __init__(
+        self,
+        initial_candidates: Sequence[ActionCandidate],
+        max_followups: int = 0,
+        *,
+        registry: CandidateRegistry | None = None,
+    ):
         validate_max_followups(max_followups)
         initial = tuple(initial_candidates)
-        if len(initial) > MAX_CANDIDATES:
-            raise ValueError("Initial candidate frontier exceeds the candidate limit.")
-        self._known = {candidate.id: candidate for candidate in initial}
-        if len(self._known) != len(initial):
-            raise ValueError("Initial candidate IDs must be unique.")
+        self.registry = CandidateRegistry(initial) if registry is None else registry
+        self._known = self.registry.by_id
         self.max_followups = max_followups
         self.lineage: list[FollowupCandidate] = []
         self._initial_count = len(initial)
-        self._next_id = len(initial) + 1
-        self._considered_spans = {_span_key(candidate.args) for candidate in initial}
+        self._considered_spans = {
+            _span_key(candidate.args)
+            for candidate in initial
+            if candidate.kind == "read_snippet" and isinstance(candidate.args, ReadSnippetArgs)
+        }
         self._processed_parents: set[str] = set()
         self._suppressed = 0
         self._candidate_suppressed = 0
@@ -69,9 +76,10 @@ class FollowupFrontier:
         """Return new neighbors of one successfully read, registered source span."""
         if (
             self.max_followups == 0
+            or parent.kind != "read_snippet"
+            or not isinstance(parent.args, ReadSnippetArgs)
             or source.sha256 != parent.args.expected_sha256
             or self._known.get(parent.id) != parent
-            or parent.kind != "read_snippet"
             or parent.id in self._processed_parents
         ):
             return ()
@@ -95,20 +103,14 @@ class FollowupFrontier:
             if key in self._considered_spans:
                 continue
             self._considered_spans.add(key)
-            candidate_limit = len(self._known) >= MAX_CANDIDATES
+            candidate_limit = self.registry.full
             followup_limit = len(self.lineage) >= self.max_followups
             if candidate_limit or followup_limit:
                 self._suppressed += 1
                 self._candidate_suppressed += int(candidate_limit)
                 self._followup_suppressed += int(followup_limit)
                 continue
-            candidate_id = f"c{self._next_id:04}"
-            while candidate_id in self._known:
-                self._next_id += 1
-                candidate_id = f"c{self._next_id:04}"
-            self._next_id += 1
-            candidate = ActionCandidate(
-                candidate_id,
+            candidate = self.registry.add(
                 "read_snippet",
                 followup_args,
                 max(0, parent.score - 1),
@@ -118,8 +120,8 @@ class FollowupFrontier:
                 ),
                 "".join(lines[start_line - 1 : end_line])[:240],
             )
+            assert candidate is not None
             derived = FollowupCandidate(candidate, parent.id, observation_id, direction)
-            self._known[candidate_id] = candidate
             self.lineage.append(derived)
             added.append(derived)
         return tuple(added)
@@ -134,7 +136,7 @@ class FollowupFrontier:
             "initial_candidates": self._initial_count,
             "generated_candidates": len(self.lineage),
             "suppressed_proposals": self._suppressed,
-            "candidate_limit_reached": len(self._known) >= MAX_CANDIDATES,
+            "candidate_limit_reached": self.registry.full,
             "followup_limit_reached": self.max_followups > 0
             and len(self.lineage) >= self.max_followups,
             "candidate_limit_suppressed_proposals": self._candidate_suppressed,

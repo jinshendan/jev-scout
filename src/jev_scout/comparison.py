@@ -22,6 +22,7 @@ from .repository import (
     SkippedFile,
     SourceFile,
 )
+from .restoration import RESTORATION_ALGORITHM, validate_max_restores
 from .version import __version__
 
 
@@ -58,11 +59,12 @@ def _elapsed_ms(started: float) -> float:
     return round(max(0.0, time.monotonic() - started) * 1000, 3)
 
 
-def _limits(max_steps: int, max_context_chars: int, max_followups: int) -> dict:
+def _limits(max_steps: int, max_context_chars: int, max_followups: int, max_restores: int) -> dict:
     return {
         "max_steps": max_steps,
         "max_context_chars": max_context_chars,
         "max_followups": max_followups,
+        "max_restores": max_restores,
         "max_excerpt_chars": 4000,
         "max_file_bytes": MAX_FILE_BYTES,
         "max_scan_bytes": MAX_SCAN_BYTES,
@@ -81,7 +83,7 @@ def _transport_mode(policy: Policy, config: dict) -> str:
 
 
 def _action_identity(candidate: dict) -> dict:
-    """Identify a concrete read independently of an arm's local candidate ID."""
+    """Identify a source action independently of arm-local candidate/observation IDs."""
     args = candidate["args"]
     return {
         "kind": candidate["kind"],
@@ -109,6 +111,7 @@ def _summarize_arm(result, policy: Policy, elapsed_ms: float) -> dict:
     candidates = {candidate["id"]: candidate for candidate in bundle["candidates"]}
     initial_candidate_count = len(bundle.get("initial_candidate_ids", candidates))
     expansion = bundle["expansion"]
+    restoration = bundle["restoration"]
     config = bundle["policy_config"]
     models = sorted(
         {
@@ -125,7 +128,12 @@ def _summarize_arm(result, policy: Policy, elapsed_ms: float) -> dict:
         "elapsed_ms": elapsed_ms,
         "stop_reason": result.stop_reason,
         "actions": result.steps,
+        "action_counts": bundle["action_counts"],
         "observations": result.observations,
+        "successful_restores": sum(
+            check["outcome"] == "restored" for check in bundle["restoration_checks"]
+        ),
+        "restoration_checks": bundle["restoration_checks"],
         "action_candidate_ids": [candidate["id"] for candidate in actions],
         "action_identities": [_action_identity(candidate) for candidate in actions],
         "observed_candidate_ids": [
@@ -140,7 +148,11 @@ def _summarize_arm(result, policy: Policy, elapsed_ms: float) -> dict:
         "generated_candidate_count": expansion.get(
             "generated_candidates", len(candidates) - initial_candidate_count
         ),
+        "generated_followup_candidate_count": expansion["generated_candidates"],
+        "generated_restore_candidate_count": restoration["generated_candidates"],
+        "total_candidate_count": len(candidates),
         "expansion": expansion,
+        "restoration": restoration,
         "active_context_chars": bundle["context"]["characters"],
         "reported_response_models": models,
         "policy_accounting": bundle["policy_accounting"],
@@ -194,6 +206,9 @@ def _render_report(summary: dict) -> str:
         "investigation budgets. Each arm has independent policy state and retained evidence.",
         "When enabled, adjacent follow-up candidates come only from captured initial files. "
         "Later candidate menus depend on each arm's preceding selections and can diverge.",
+        "When enabled, restoration rechecks an evicted observation against the same frozen "
+        "capture before projecting its retained text back into the bounded context. "
+        "It does not reopen the original checkout or add a new raw observation.",
         "The capture is a bounded, sequential collection of retained candidate files; it is "
         "not an atomic snapshot of the whole repository. Truncated discovery remains partial.",
         "The manifest records identities and candidate metadata, not a full source archive. "
@@ -208,21 +223,31 @@ def _render_report(summary: dict) -> str:
         f"maximum generated candidates per arm: "
         f"{summary['snapshot']['expansion']['max_followups']}; "
         f"total candidate cap: {summary['snapshot']['expansion']['max_candidates']}.",
+        f"Restoration algorithm: `{summary['snapshot']['restoration']['algorithm']}`; "
+        f"maximum generated restore candidates per arm: "
+        f"{summary['snapshot']['restoration']['max_restores']}. Follow-ups and restoration "
+        "share the total candidate cap and action budget; the restore quota counts offered "
+        "actions, not guaranteed successful rechecks.",
         f"Shared discovery/capture elapsed: {timing['capture_elapsed_ms']} ms; "
         f"whole comparison elapsed through summary construction: {timing['whole_elapsed_ms']} ms.",
         "Arms run sequentially in the fixed order: rule, challenger. Timing excludes final "
         "comparison-summary publication and is not a controlled benchmark of cold-start latency.",
         "",
-        "| Arm | Configured policy | Transport | Initial candidates | Generated candidates | "
-        "Actions | Observations | Elapsed ms |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Arm | Configured policy | Transport | Initial candidates | Follow-up offers | "
+        "Restore offers | Read actions | Restore actions | Successful restores | "
+        "Observations | Elapsed ms |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for name in ("rule", "challenger"):
         arm = summary["arms"][name]
         lines.append(
             f"| [{name}]({name}/report.md) | `{arm['configured_policy']}` | "
             f"`{arm['transport']}` | {arm['initial_candidate_count']} | "
-            f"{arm['generated_candidate_count']} | {arm['actions']} | {arm['observations']} | "
+            f"{arm['generated_followup_candidate_count']} | "
+            f"{arm['generated_restore_candidate_count']} | "
+            f"{arm['action_counts']['read_snippet']} | "
+            f"{arm['action_counts']['restore_observation']} | "
+            f"{arm['successful_restores']} | {arm['observations']} | "
             f"{arm['elapsed_ms']} |"
         )
     lines.extend(["", "## Provider accounting", ""])
@@ -256,7 +281,10 @@ def _render_report(summary: dict) -> str:
             f"Observed-candidate overlap (Jaccard): `{agreement['observed_candidate_jaccard']}`.",
             "Agreement matches concrete source actions by kind, relative path, expected "
             "source SHA-256, line span, and excerpt character limit. Candidate IDs are local "
-            "trace references and can name different follow-ups in different arms.",
+            "trace references and can name different follow-ups in different arms. "
+            "Restore targets' observation IDs are also local trace references and are "
+            "excluded from agreement identities. Reads and restores remain distinct actions; "
+            "observed-candidate overlap counts original read observations once.",
             "Empty denominators produce null. Agreement measures behavior, not evidence quality, "
             "root-cause accuracy, or repair success. "
             "No investigated source was executed or edited.",
@@ -282,6 +310,7 @@ def compare(
     challenger_factory: Callable[[], Policy] = RulePolicy,
     *,
     max_followups: int = 0,
+    max_restores: int = 0,
 ) -> ComparisonResult:
     """Run fresh rule and challenger policies over one bounded frozen source input.
 
@@ -289,6 +318,7 @@ def compare(
     can supply a fresh Jev policy factory for a live or explicitly injected arm.
     Discovery and capture finish successfully before the challenger factory is invoked.
     Optional follow-ups are generated independently from the captured initial files.
+    Optional restorations recheck retained observations against that same capture.
     """
     if not task.strip():
         raise ValueError("Task must not be empty.")
@@ -304,6 +334,7 @@ def compare(
     if not callable(challenger_factory):
         raise ValueError("Challenger factory must construct a fresh policy.")
     validate_max_followups(max_followups)
+    validate_max_restores(max_restores)
     started = time.monotonic()
     with SafeRepository(Path(repo)) as repository:
         destination = prepare_output(
@@ -344,11 +375,16 @@ def compare(
                 {"path": path, "sha256": source.sha256, "byte_size": source.byte_size}
                 for path, source in sorted(sources.items())
             ],
-            "limits": _limits(max_steps, max_context_chars, max_followups),
+            "limits": _limits(max_steps, max_context_chars, max_followups, max_restores),
             "expansion": {
                 "algorithm": EXPANSION_ALGORITHM,
                 "window_lines": FOLLOWUP_LINES,
                 "max_followups": max_followups,
+                "max_candidates": MAX_CANDIDATES,
+            },
+            "restoration": {
+                "algorithm": RESTORATION_ALGORITHM,
+                "max_restores": max_restores,
                 "max_candidates": MAX_CANDIDATES,
             },
             "scan": deepcopy(repository.stats),
@@ -374,6 +410,7 @@ def compare(
                 source_mode="frozen",
                 snapshot_id=snapshot_id,
                 max_followups=max_followups,
+                max_restores=max_restores,
             )
             arms[name] = _summarize_arm(result, policy, _elapsed_ms(arm_started))
         revalidated = []
@@ -390,7 +427,7 @@ def compare(
             status_counts[status] += 1
             revalidated.append({"path": path, "status": status, "current_sha256": current_sha256})
         summary = {
-            "schema_version": 2,
+            "schema_version": 3,
             "snapshot_id": snapshot_id,
             "snapshot": snapshot,
             "captured_bytes": captured_bytes,

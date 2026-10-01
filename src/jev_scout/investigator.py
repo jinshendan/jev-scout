@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .artifacts import prepare_output as _prepare_output
 from .expansion import FollowupFrontier, validate_max_followups
+from .frontier import CandidateRegistry
 from .models import (
     ActionCandidate,
     ContextEntry,
@@ -16,6 +17,8 @@ from .models import (
     InvestigationResult,
     Policy,
     PolicyDecision,
+    ReadSnippetArgs,
+    RestoreObservationArgs,
     RulePolicy,
 )
 from .repository import (
@@ -27,6 +30,8 @@ from .repository import (
     SafeRepository,
     SkippedFile,
 )
+from .restoration import RestorationFrontier, validate_max_restores
+from .source_checks import revalidate_excerpt
 
 
 class EventLog:
@@ -72,6 +77,73 @@ def _add_context(active, observation, max_chars, events, evicted):
         )
 
 
+def _restore_context(
+    candidate, observations, active, max_chars, repository, source_mode, events, evicted
+):
+    args = candidate.args
+    observation = observations.get(args.observation_id)
+    check = {
+        "candidate_id": candidate.id,
+        "observation_id": args.observation_id,
+        "source_mode": source_mode,
+        "current_sha256": None,
+        "outcome": "omitted",
+    }
+    if observation is None or (
+        args.path,
+        args.start_line,
+        args.end_line,
+        args.expected_sha256,
+    ) != (
+        observation["path"],
+        observation["start_line"],
+        observation["end_line"],
+        observation["source_sha256"],
+    ):
+        check.update(validity="target_mismatch", source_check_reason="invalid_restore_target")
+    elif any(entry.observation_id == args.observation_id for entry in active):
+        check.update(validity="already_active", source_check_reason="observation_already_active")
+    else:
+        verified = revalidate_excerpt(
+            observation,
+            repository,
+            max_excerpt_chars=args.max_chars,
+            source_mode=source_mode,
+            current_label="current_at_restore_check",
+        )
+        check.update(
+            {key: verified[key] for key in ("validity", "current_sha256", "source_check_reason")}
+        )
+        if "checked_snapshot_sha256" in verified:
+            check["checked_snapshot_sha256"] = verified["checked_snapshot_sha256"]
+        if verified["validity"] in {"current_at_restore_check", "matched_frozen_snapshot"}:
+            _add_context(active, observation, max_chars, events, evicted)
+            check["outcome"] = "restored"
+    events.emit("observation_restoration_checked", **check, raw_evidence_preserved=True)
+    return check
+
+
+def _offer_restorations(restoration, evicted_ids, observations, active, by_id, candidates, events):
+    if restoration.max_restores == 0:
+        return
+    active_ids = {entry.observation_id for entry in active}
+    for identifier in evicted_ids:
+        if identifier in active_ids:
+            continue
+        observation = observations[identifier]
+        candidate = restoration.offer(observation, by_id[observation["candidate_id"]])
+        if candidate is not None:
+            candidates.append(candidate)
+            events.emit(
+                "restoration_candidate_generated",
+                observation_id=identifier,
+                original_candidate_id=observation["candidate_id"],
+                candidate=candidate.to_dict(),
+            )
+    if evicted_ids:
+        events.emit("restoration_frontier_checked", restoration=restoration.describe())
+
+
 def _policy_accounting(decisions: list[dict]) -> dict:
     attempts = [attempt for decision in decisions for attempt in decision["attempts"]]
     return {
@@ -92,6 +164,8 @@ def _render_report(bundle: dict) -> str:
     scan = bundle["scan"]
     accounting = bundle["policy_accounting"]
     expansion = bundle["expansion"]
+    restoration = bundle["restoration"]
+    restored = sum(check["outcome"] == "restored" for check in bundle["restoration_checks"])
     lines = [
         "# Code investigation report",
         "",
@@ -119,7 +193,13 @@ def _render_report(bundle: dict) -> str:
         "Reported sums exclude unknown usage and are not whole-run cost estimates.",
         "",
         f"Stop reason: `{bundle['stop_reason']}`.",
-        f"Snippet actions: {bundle['steps']} / {bundle['limits']['max_steps']}.",
+        f"Total actions: {bundle['steps']} / {bundle['limits']['max_steps']}; "
+        f"snippet read attempts: {bundle['action_counts']['read_snippet']}; "
+        f"restoration attempts: {bundle['action_counts']['restore_observation']}.",
+        f"Restored observations: {restored}; "
+        f"generated restoration offers: {restoration['generated_candidates']} / "
+        f"{restoration['max_restores']}; suppressed restoration proposals: "
+        f"{restoration['suppressed_proposals']}.",
         f"Active excerpt characters: {context['characters']} / {context['max_chars']}.",
         f"Discovery truncated: `{scan['truncated']}`. "
         f"Retained candidates: {expansion['initial_candidates']} / "
@@ -160,8 +240,18 @@ def _render_report(bundle: dict) -> str:
         longest = max((len(match) for match in re.findall(r"`+", observation["text"])), default=0)
         fence = "`" * max(3, longest + 1)
         lines.extend([fence + "text", observation["text"].rstrip("\n"), fence, ""])
+    lines.extend(["## Context restorations", ""])
+    if not bundle["restoration_checks"]:
+        lines.extend(["No restoration actions were selected.", ""])
+    for check in bundle["restoration_checks"]:
+        lines.append(
+            f"- `{check['candidate_id']}` targeted `{check['observation_id']}`: "
+            f"`{check['outcome']}`; check scope: `{check['source_mode']}`; "
+            f"validity: `{check['validity']}`."
+        )
     lines.extend(
         [
+            "",
             "## Policy decisions",
             "",
             "Confidence describes the provider's choice distribution; "
@@ -190,6 +280,13 @@ def _render_report(bundle: dict) -> str:
             "excerpts can be truncated, including within a long source line.",
             "Context eviction and truncation affect only the active projection. "
             "Raw observations remain in events.jsonl and evidence.json.",
+            "Optional restoration offers target evicted observations from this run once each. "
+            "Selected restores recheck the source hash and exact excerpt before applying the same "
+            "FIFO context budget. Restores preserve original observation IDs and consume normal "
+            "action steps, including failed checks. Reads and restores share the total candidate "
+            "cap; follow-up offers are admitted before restoration offers after a read. "
+            "The rule policy prioritizes source reads over restores. Restoration checks describe "
+            "their own point in time or frozen snapshot, separately from final source validity.",
             "Source hashes describe snapshots; re-check sources before using these observations "
             "to make changes. No compilation, tests, or patches were performed. "
             "Remote policy calls, when enabled, select existing candidates and do not verify code.",
@@ -210,6 +307,7 @@ def investigate(
     policy: Policy | None = None,
     *,
     max_followups: int = 0,
+    max_restores: int = 0,
 ) -> InvestigationResult:
     """Inspect bounded snippets, with complete raw evidence and no repository writes."""
     if not task.strip():
@@ -220,6 +318,7 @@ def investigate(
     ):
         raise ValueError("Step and context budgets must be positive integers.")
     validate_max_followups(max_followups)
+    validate_max_restores(max_restores)
     policy = RulePolicy() if policy is None else policy
     with SafeRepository(Path(repo)) as repository:
         destination = _prepare_output(Path(output), repository.root)
@@ -231,6 +330,7 @@ def investigate(
             max_context_chars,
             policy,
             max_followups=max_followups,
+            max_restores=max_restores,
         )
 
 
@@ -246,6 +346,7 @@ def _run_investigation(
     source_mode: str = "live",
     snapshot_id: str | None = None,
     max_followups: int = 0,
+    max_restores: int = 0,
 ) -> InvestigationResult:
     """Execute a live or prepared frontier in an already validated output directory."""
     if source_mode not in {"live", "frozen"}:
@@ -267,18 +368,23 @@ def _run_investigation(
             source_mode=source_mode,
             snapshot_id=snapshot_id,
             max_followups=max_followups,
+            max_restores=max_restores,
         )
         candidates, terms = repository.discover(task) if frontier is None else frontier
         initial_candidate_ids = [candidate.id for candidate in candidates]
-        expansion = FollowupFrontier(candidates, max_followups)
+        registry = CandidateRegistry(candidates)
+        expansion = FollowupFrontier(candidates, max_followups, registry=registry)
+        restoration = RestorationFrontier(registry, max_restores)
         events.emit(
             "candidates_discovered",
             terms=terms,
             scan=repository.stats,
             candidates=[candidate.to_dict() for candidate in candidates],
         )
-        by_id = {candidate.id: candidate for candidate in candidates}
+        by_id = registry.by_id
         seen, observations, active, evicted, decisions = set(), [], [], [], []
+        observations_by_id, restoration_checks = {}, []
+        action_counts = {"read_snippet": 0, "restore_observation": 0}
         steps, stop_reason = 0, "no_candidates"
         while candidates and steps < max_steps:
             if len(seen) == len(candidates):
@@ -315,6 +421,37 @@ def _run_investigation(
             seen.add(chosen)
             steps += 1
             events.emit("action_selected", step=steps, candidate=candidate.to_dict())
+            evicted_before = len(evicted)
+            if candidate.kind == "restore_observation" and isinstance(
+                candidate.args, RestoreObservationArgs
+            ):
+                action_counts["restore_observation"] += 1
+                restoration_checks.append(
+                    _restore_context(
+                        candidate,
+                        observations_by_id,
+                        active,
+                        max_context_chars,
+                        repository,
+                        source_mode,
+                        events,
+                        evicted,
+                    )
+                )
+                _offer_restorations(
+                    restoration,
+                    evicted[evicted_before:],
+                    observations_by_id,
+                    active,
+                    by_id,
+                    candidates,
+                    events,
+                )
+                continue
+            if candidate.kind != "read_snippet" or not isinstance(candidate.args, ReadSnippetArgs):
+                events.emit("action_skipped", candidate_id=chosen, reason="unsupported_action")
+                continue
+            action_counts["read_snippet"] += 1
             try:
                 source = repository.read(candidate.args.path)
             except SkippedFile as exc:
@@ -345,6 +482,7 @@ def _run_investigation(
                 "validity": "matched_at_read",
             }
             observations.append(observation)
+            observations_by_id[observation["id"]] = observation
             events.emit("observation_recorded", observation=observation)
             _add_context(active, observation, max_context_chars, events, evicted)
             if max_followups:
@@ -365,6 +503,15 @@ def _run_investigation(
                     generated_candidate_ids=[entry.candidate.id for entry in additions],
                     expansion=expansion.describe(),
                 )
+            _offer_restorations(
+                restoration,
+                evicted[evicted_before:],
+                observations_by_id,
+                active,
+                by_id,
+                candidates,
+                events,
+            )
         else:
             if candidates:
                 stop_reason = (
@@ -398,7 +545,7 @@ def _run_investigation(
                 source_mode=source_mode,
             )
         bundle = {
-            "schema_version": 2,
+            "schema_version": 3,
             "source_mode": source_mode,
             "snapshot_id": snapshot_id,
             "repo": str(repository.root),
@@ -409,6 +556,7 @@ def _run_investigation(
             "policy_accounting": _policy_accounting(decisions),
             "stop_reason": stop_reason,
             "steps": steps,
+            "action_counts": action_counts,
             "limits": {
                 "max_steps": max_steps,
                 "max_context_chars": max_context_chars,
@@ -419,6 +567,7 @@ def _run_investigation(
                 "max_scan_entries": MAX_SCAN_ENTRIES,
                 "max_candidates": MAX_CANDIDATES,
                 "max_followups": max_followups,
+                "max_restores": max_restores,
             },
             "scan": repository.stats,
             "terms": terms,
@@ -426,6 +575,8 @@ def _run_investigation(
             "initial_candidate_ids": initial_candidate_ids,
             "expansion": expansion.describe(),
             "generated_candidate_lineage": [entry.to_dict() for entry in expansion.lineage],
+            "restoration": restoration.describe(),
+            "restoration_checks": restoration_checks,
             "deferred_candidate_ids": [c.id for c in candidates if c.id not in seen],
             "observations": observations,
             "context": {

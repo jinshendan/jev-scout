@@ -11,10 +11,11 @@ from pathlib import Path, PurePosixPath
 
 from .artifacts import prepare_output
 from .investigator import EventLog, _add_context
-from .repository import IGNORED_DIRS, MAX_CANDIDATES, MAX_FILE_BYTES, SafeRepository, SkippedFile
+from .repository import IGNORED_DIRS, MAX_CANDIDATES, MAX_FILE_BYTES, SafeRepository
+from .source_checks import MAX_EXCERPT_CHARS
+from .source_checks import revalidate_excerpt as _revalidate
 
 MAX_IMPORT_BYTES = 16 * 1024 * 1024
-MAX_EXCERPT_CHARS = 4000
 OUTPUT_NAMES = ("recovery.json", "events.jsonl", "report.md")
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _OBSERVATION_ID = re.compile(r"o[0-9]{4}\Z")
@@ -128,8 +129,8 @@ def _safe_path(value: object) -> bool:
 
 
 def _validated_observations(bundle: dict) -> dict[str, dict]:
-    if type(bundle.get("schema_version")) is not int or bundle["schema_version"] not in (1, 2):
-        raise ValueError("Recovery supports investigation evidence schemas 1 and 2.")
+    if type(bundle.get("schema_version")) is not int or bundle["schema_version"] not in (1, 2, 3):
+        raise ValueError("Recovery supports investigation evidence schemas 1, 2, and 3.")
     observations = bundle.get("observations")
     if not isinstance(observations, list) or len(observations) > MAX_CANDIDATES:
         raise ValueError("Evidence observations must be a bounded list.")
@@ -191,30 +192,6 @@ def _validated_observations(bundle: dict) -> dict[str, dict]:
             record["original_current_sha256"] = current_hash
         result[identifier] = record
     return result
-
-
-def _revalidate(observation: dict, repository: SafeRepository) -> dict:
-    record = dict(observation)
-    try:
-        source = repository.read(record["path"])
-    except SkippedFile as exc:
-        record.update(validity="unavailable", current_sha256=None, source_check_reason=str(exc))
-        return record
-    record["current_sha256"] = source.sha256
-    if source.sha256 != record["source_sha256"]:
-        record.update(validity="changed", source_check_reason="source_hash_changed")
-        return record
-    lines = source.text.splitlines(keepends=True)
-    raw = "".join(lines[record["start_line"] - 1 : record["end_line"]])
-    if (
-        record["end_line"] > max(1, len(lines))
-        or raw[:MAX_EXCERPT_CHARS] != record["text"]
-        or (len(raw) > MAX_EXCERPT_CHARS) != record["excerpt_truncated"]
-    ):
-        record.update(validity="excerpt_mismatch", source_check_reason="recorded_excerpt_mismatch")
-    else:
-        record.update(validity="current_at_recovery_check", source_check_reason=None)
-    return record
 
 
 def _render_report(bundle: dict) -> str:

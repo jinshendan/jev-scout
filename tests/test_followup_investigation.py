@@ -60,7 +60,7 @@ class FollowupInvestigationTests(unittest.TestCase):
     def test_policy_can_read_evidence_outside_the_initial_window(self):
         investigate(self.repo, self.task, self.output, max_steps=3, max_followups=2)
         bundle = self.bundle()
-        self.assertEqual(bundle["schema_version"], 2)
+        self.assertEqual(bundle["schema_version"], 3)
         self.assertEqual(bundle["initial_candidate_ids"], ["c0001"])
         self.assertEqual(len(bundle["observations"]), 3)
         self.assertNotIn("before_only_marker", bundle["observations"][0]["text"])

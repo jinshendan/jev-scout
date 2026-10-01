@@ -2,7 +2,7 @@
 
 [English](demo.md) · [简体中文](demo.zh-CN.md)
 
-本教程使用虚构的 C++ 源码树 `examples/cancellation`，展示 Jev Scout 0.4.0 的能力：只读搜索仓库、记录源码证据、可选的相邻读取、显式恢复和冻结输入下的策略比较。教程不会编译示例、执行回调、复现缺陷、确定根因，也不会提出已经验证的修复。
+本教程使用虚构的 C++ 源码树 `examples/cancellation`，展示 Jev Scout 0.5.0 的能力：只读搜索仓库、记录源码证据、可选的相邻读取、由策略选择的上下文恢复、显式恢复和冻结输入下的策略比较。教程不会编译示例、执行回调、复现缺陷、确定根因，也不会提出已经验证的修复。
 
 ## 运行调查
 
@@ -53,6 +53,26 @@ scout investigate \
 
 相邻窗口不会搜索新文件，也不能证明完整覆盖。长行可能超过 4,000 字符的片段限制。若仍缺少证据，可扩大英文任务的范围，或手动检查源码。确切限制与父子关系见[相邻扩展指南（英文）](follow-up-evidence.md)。
 
+## 在同一次运行中恢复上下文
+
+使用较小的上下文预算，让移出行为可见，再允许策略选择恢复动作：
+
+```sh
+scout investigate \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/restoration-demo \
+  --max-steps 12 \
+  --max-context-chars 40 \
+  --max-restores 3
+```
+
+`--max-restores 3` 最多纳入三个恢复候选，每个都针对本次运行移出的一条不同观察。默认值为零。规则策略先选择尚未读取的候选，再选择所提供的恢复；Jev 可以从两种动作中选择。每个选中的动作都消耗同样的十二步预算，包括因源码不再匹配而省略的恢复。
+
+查看 `.scout/restoration-demo/evidence.json` 和 `events.jsonl` 中的候选种类、恢复统计、动作事件及活跃观察 ID。成功恢复会重新核对原路径、源码哈希、行范围、片段和截断标记。它重新使用原观察 ID 和已保留文本，不会生成新的观察。四十字符的上下文投影可能截断片段并移出另一条投影；这些事件都不会删除原始证据。每条观察最多获得一个恢复候选，即使它再次被移出。
+
+这展示了有上限地重新使用证据的接口，不能证明恢复的证据有助于完成任务。详见[上下文恢复指南（英文）](policy-context-restoration.md)。
+
 ## 恢复一条已保留的观察
 
 在生成的 `evidence.json` 中找到观察 ID，然后显式请求恢复。第一条观察的 ID 通常是 `o0001`：
@@ -97,7 +117,21 @@ scout compare \
   --max-followups 6
 ```
 
-两组共享初始候选和捕获的源码，后续菜单根据各自成功的读取生成。比较 schema 2 保留各分支内的候选 ID，但按源码与动作身份衡量一致性。请将各分支的 `expansion` 记录与一致性数值一起检查。
+两组共享初始候选和捕获的源码，后续菜单根据各自成功的读取生成。比较 schema 3 保留各分支内的候选 ID，但按源码与动作身份衡量一致性。请将各分支的 `expansion` 记录与一致性数值一起检查。
+
+在两个离线分支中验证恢复功能：
+
+```sh
+scout compare \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/restoration-comparison \
+  --max-steps 12 \
+  --max-context-chars 40 \
+  --max-restores 3
+```
+
+检查各分支比较摘要中的 `action_counts`、`successful_restores` 和 `restoration_checks`。恢复验证已捕获的源码，两组运行后另行检查当前工作副本。一致率区分读取与恢复，并排除各分支内的观察 ID。恢复证据不会增加已观察源码的重合度。规则对规则的一致性仍只是流程检查，不表示已测得策略质量收益。
 
 ## 阅读证据
 
