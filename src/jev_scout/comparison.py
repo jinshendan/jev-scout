@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .artifacts import prepare_output
+from .expansion import EXPANSION_ALGORITHM, FOLLOWUP_LINES, validate_max_followups
 from .investigator import _run_investigation
 from .models import Policy, RulePolicy
 from .repository import (
@@ -57,10 +58,11 @@ def _elapsed_ms(started: float) -> float:
     return round(max(0.0, time.monotonic() - started) * 1000, 3)
 
 
-def _limits(max_steps: int, max_context_chars: int) -> dict:
+def _limits(max_steps: int, max_context_chars: int, max_followups: int) -> dict:
     return {
         "max_steps": max_steps,
         "max_context_chars": max_context_chars,
+        "max_followups": max_followups,
         "max_excerpt_chars": 4000,
         "max_file_bytes": MAX_FILE_BYTES,
         "max_scan_bytes": MAX_SCAN_BYTES,
@@ -78,12 +80,35 @@ def _transport_mode(policy: Policy, config: dict) -> str:
     return transport if transport in ("http", "injected") else "custom"
 
 
+def _action_identity(candidate: dict) -> dict:
+    """Identify a concrete read independently of an arm's local candidate ID."""
+    args = candidate["args"]
+    return {
+        "kind": candidate["kind"],
+        "path": args["path"],
+        "expected_sha256": args["expected_sha256"],
+        "start_line": args["start_line"],
+        "end_line": args["end_line"],
+        "max_chars": args["max_chars"],
+    }
+
+
+def _identity_key(identity: dict) -> tuple:
+    return tuple(
+        identity[field]
+        for field in ("kind", "path", "expected_sha256", "start_line", "end_line", "max_chars")
+    )
+
+
 def _summarize_arm(result, policy: Policy, elapsed_ms: float) -> dict:
     bundle = json.loads(result.evidence_path.read_text(encoding="utf-8"))
     events = [
         json.loads(line) for line in result.events_path.read_text(encoding="utf-8").splitlines()
     ]
-    actions = [event["candidate"]["id"] for event in events if event["type"] == "action_selected"]
+    actions = [event["candidate"] for event in events if event["type"] == "action_selected"]
+    candidates = {candidate["id"]: candidate for candidate in bundle["candidates"]}
+    initial_candidate_count = len(bundle.get("initial_candidate_ids", candidates))
+    expansion = bundle["expansion"]
     config = bundle["policy_config"]
     models = sorted(
         {
@@ -101,11 +126,21 @@ def _summarize_arm(result, policy: Policy, elapsed_ms: float) -> dict:
         "stop_reason": result.stop_reason,
         "actions": result.steps,
         "observations": result.observations,
-        "action_candidate_ids": actions,
+        "action_candidate_ids": [candidate["id"] for candidate in actions],
+        "action_identities": [_action_identity(candidate) for candidate in actions],
         "observed_candidate_ids": [
             observation["candidate_id"] for observation in bundle["observations"]
         ],
         "observed_paths": [observation["path"] for observation in bundle["observations"]],
+        "observed_action_identities": [
+            _action_identity(candidates[observation["candidate_id"]])
+            for observation in bundle["observations"]
+        ],
+        "initial_candidate_count": initial_candidate_count,
+        "generated_candidate_count": expansion.get(
+            "generated_candidates", len(candidates) - initial_candidate_count
+        ),
+        "expansion": expansion,
         "active_context_chars": bundle["context"]["characters"],
         "reported_response_models": models,
         "policy_accounting": bundle["policy_accounting"],
@@ -113,16 +148,28 @@ def _summarize_arm(result, policy: Policy, elapsed_ms: float) -> dict:
 
 
 def _agreement(baseline: dict, challenger: dict) -> dict:
-    first = baseline["action_candidate_ids"]
-    second = challenger["action_candidate_ids"]
+    first = [_identity_key(identity) for identity in baseline["action_identities"]]
+    second = [_identity_key(identity) for identity in challenger["action_identities"]]
     positions = max(len(first), len(second))
     matching = sum(left == right for left, right in zip(first, second, strict=False))
-    first_observed = set(baseline["observed_candidate_ids"])
-    second_observed = set(challenger["observed_candidate_ids"])
+    first_observed = {
+        _identity_key(identity) for identity in baseline["observed_action_identities"]
+    }
+    second_observed = {
+        _identity_key(identity) for identity in challenger["observed_action_identities"]
+    }
     shared = first_observed & second_observed
     union = first_observed | second_observed
     return {
         "interpretation": "Behavioral agreement is not evidence quality or task success.",
+        "identity_basis": [
+            "kind",
+            "path",
+            "expected_sha256",
+            "start_line",
+            "end_line",
+            "max_chars",
+        ],
         "action_positions": positions,
         "matching_action_positions": matching,
         "positional_action_agreement": matching / positions if positions else None,
@@ -145,6 +192,8 @@ def _render_report(summary: dict) -> str:
         "",
         "Both arms use the same captured source text, initial candidate frontier, task, and "
         "investigation budgets. Each arm has independent policy state and retained evidence.",
+        "When enabled, adjacent follow-up candidates come only from captured initial files. "
+        "Later candidate menus depend on each arm's preceding selections and can diverge.",
         "The capture is a bounded, sequential collection of retained candidate files; it is "
         "not an atomic snapshot of the whole repository. Truncated discovery remains partial.",
         "The manifest records identities and candidate metadata, not a full source archive. "
@@ -154,19 +203,26 @@ def _render_report(summary: dict) -> str:
         f"candidate frontier truncated: `{summary['snapshot']['scan']['candidate_truncated']}`.",
         f"Captured files: {len(summary['snapshot']['sources'])}; "
         f"captured bytes: {summary['captured_bytes']}.",
+        f"Follow-up algorithm: `{summary['snapshot']['expansion']['algorithm']}`; "
+        f"window lines: {summary['snapshot']['expansion']['window_lines']}; "
+        f"maximum generated candidates per arm: "
+        f"{summary['snapshot']['expansion']['max_followups']}; "
+        f"total candidate cap: {summary['snapshot']['expansion']['max_candidates']}.",
         f"Shared discovery/capture elapsed: {timing['capture_elapsed_ms']} ms; "
         f"whole comparison elapsed through summary construction: {timing['whole_elapsed_ms']} ms.",
         "Arms run sequentially in the fixed order: rule, challenger. Timing excludes final "
         "comparison-summary publication and is not a controlled benchmark of cold-start latency.",
         "",
-        "| Arm | Configured policy | Transport | Actions | Observations | Elapsed ms |",
-        "| --- | --- | --- | ---: | ---: | ---: |",
+        "| Arm | Configured policy | Transport | Initial candidates | Generated candidates | "
+        "Actions | Observations | Elapsed ms |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for name in ("rule", "challenger"):
         arm = summary["arms"][name]
         lines.append(
             f"| [{name}]({name}/report.md) | `{arm['configured_policy']}` | "
-            f"`{arm['transport']}` | {arm['actions']} | {arm['observations']} | "
+            f"`{arm['transport']}` | {arm['initial_candidate_count']} | "
+            f"{arm['generated_candidate_count']} | {arm['actions']} | {arm['observations']} | "
             f"{arm['elapsed_ms']} |"
         )
     lines.extend(["", "## Provider accounting", ""])
@@ -198,6 +254,9 @@ def _render_report(summary: dict) -> str:
             f"{agreement['action_positions']}; "
             f"positional agreement: `{agreement['positional_action_agreement']}`.",
             f"Observed-candidate overlap (Jaccard): `{agreement['observed_candidate_jaccard']}`.",
+            "Agreement matches concrete source actions by kind, relative path, expected "
+            "source SHA-256, line span, and excerpt character limit. Candidate IDs are local "
+            "trace references and can name different follow-ups in different arms.",
             "Empty denominators produce null. Agreement measures behavior, not evidence quality, "
             "root-cause accuracy, or repair success. "
             "No investigated source was executed or edited.",
@@ -221,12 +280,15 @@ def compare(
     max_steps: int = 8,
     max_context_chars: int = 12000,
     challenger_factory: Callable[[], Policy] = RulePolicy,
+    *,
+    max_followups: int = 0,
 ) -> ComparisonResult:
     """Run fresh rule and challenger policies over one bounded frozen source input.
 
     The default rule-versus-rule pair is an offline reproducibility check. A caller
     can supply a fresh Jev policy factory for a live or explicitly injected arm.
     Discovery and capture finish successfully before the challenger factory is invoked.
+    Optional follow-ups are generated independently from the captured initial files.
     """
     if not task.strip():
         raise ValueError("Task must not be empty.")
@@ -241,6 +303,7 @@ def compare(
         raise ValueError("Step and context budgets must be positive integers.")
     if not callable(challenger_factory):
         raise ValueError("Challenger factory must construct a fresh policy.")
+    validate_max_followups(max_followups)
     started = time.monotonic()
     with SafeRepository(Path(repo)) as repository:
         destination = prepare_output(
@@ -281,7 +344,13 @@ def compare(
                 {"path": path, "sha256": source.sha256, "byte_size": source.byte_size}
                 for path, source in sorted(sources.items())
             ],
-            "limits": _limits(max_steps, max_context_chars),
+            "limits": _limits(max_steps, max_context_chars, max_followups),
+            "expansion": {
+                "algorithm": EXPANSION_ALGORITHM,
+                "window_lines": FOLLOWUP_LINES,
+                "max_followups": max_followups,
+                "max_candidates": MAX_CANDIDATES,
+            },
             "scan": deepcopy(repository.stats),
         }
         encoded = json.dumps(snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -304,6 +373,7 @@ def compare(
                 frontier=(candidates.copy(), terms.copy()),
                 source_mode="frozen",
                 snapshot_id=snapshot_id,
+                max_followups=max_followups,
             )
             arms[name] = _summarize_arm(result, policy, _elapsed_ms(arm_started))
         revalidated = []
@@ -320,7 +390,7 @@ def compare(
             status_counts[status] += 1
             revalidated.append({"path": path, "status": status, "current_sha256": current_sha256})
         summary = {
-            "schema_version": 1,
+            "schema_version": 2,
             "snapshot_id": snapshot_id,
             "snapshot": snapshot,
             "captured_bytes": captured_bytes,

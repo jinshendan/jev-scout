@@ -3,9 +3,10 @@
 [English](demo.md) · [简体中文](demo.zh-CN.md)
 
 This walkthrough uses `examples/cancellation`, a fictional C++ source tree, to
-demonstrate Jev Scout's first milestone: read-only repository search and recorded
-source evidence. It does not compile the example, execute a callback, reproduce
-a defect, determine a root cause, or propose a verified fix.
+demonstrate Jev Scout 0.4.0: read-only repository search, recorded source evidence,
+optional neighboring reads, explicit recovery, and frozen policy comparisons.
+It does not compile the example, execute a callback, reproduce a defect,
+determine a root cause, or propose a verified fix.
 
 ## Run an investigation
 
@@ -48,6 +49,37 @@ Use fresh output directories outside `examples/cancellation` for every command.
 If `.scout/demo` already exists from an earlier run, choose a new name and use
 that name in the recovery command below.
 
+## Inspect adjacent source
+
+Run a new investigation with neighboring evidence enabled:
+
+```sh
+scout investigate \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/followup-demo \
+  --max-steps 12 \
+  --max-context-chars 1200 \
+  --max-followups 6
+```
+
+The runtime may offer up to six new candidates during this run, each an adjacent
+window of at most nine lines in a successfully read file. The rule policy still
+chooses the next action, and all selected reads share the twelve-step budget.
+The default `--max-followups 0` keeps the original fixed frontier.
+
+Compare `initial_candidate_ids`, `generated_candidate_lineage`, and `expansion`
+in `.scout/followup-demo/evidence.json`. Each generated candidate links to the
+candidate and observation that allowed it to be offered. `candidate_generated`
+events retain the complete candidate and its parent IDs;
+`frontier_expansion_checked` events record expansion counts and generated IDs.
+An offered candidate need not be selected, and its quota is still consumed.
+
+Neighboring windows do not search new files or prove complete coverage. Long
+lines can exceed the 4,000-character excerpt limit. If evidence is still missing,
+broaden the English task or inspect the source manually. See the
+[follow-up guide](follow-up-evidence.md) for exact limits and lineage.
+
 ## Recover a retained observation
 
 Find an observation ID in the generated `evidence.json`, then request it
@@ -82,7 +114,7 @@ scout compare \
 ```
 
 The default challenger is another fresh rule policy. Both arms use one captured
-candidate frontier and source content. Inspect `comparison.json`, the top-level
+initial candidate frontier and source content. Inspect `comparison.json`, the top-level
 `report.md`, and the normal evidence bundles under `rule/` and `challenger/`.
 Frozen observations describe captured content; a separate checkout check shows
 whether the original files still match afterward.
@@ -91,6 +123,23 @@ Identical rule decisions are a sanity check, not a quality or cost result.
 `--challenger jev` explicitly enables TypeSafe source transmission and requires
 an environment key. See the [comparison guide](policy-comparison.md) before
 running it on private source. No live Jev benefit is established by this demo.
+
+To exercise the same follow-up settings in both offline comparison arms:
+
+```sh
+scout compare \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/followup-comparison \
+  --max-steps 12 \
+  --max-context-chars 1200 \
+  --max-followups 6
+```
+
+Both arms share the initial candidates and captured source; their later menus
+are generated from their own successful reads. Comparison schema 2 retains
+each arm's local candidate IDs but measures agreement by source/action identity.
+Inspect the per-arm `expansion` records alongside the agreement values.
 
 ## Read the evidence
 

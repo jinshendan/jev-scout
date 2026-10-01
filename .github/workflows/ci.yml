@@ -49,23 +49,31 @@ jobs:
         run: |
           python -m pip install --force-reinstall dist/*.whl
           scout investigate --repo examples/cancellation --task "Investigate whether Request::cancel removes queued callbacks." --output .scout/ci --max-steps 6
+          scout investigate --repo examples/cancellation --task "Investigate whether Request::cancel removes queued callbacks." --output .scout/ci-followups --max-steps 12 --max-followups 6
           scout recover --evidence .scout/ci/evidence.json --repo examples/cancellation --observation o0001 --output .scout/ci-recovery --max-context-chars 40
-          scout compare --repo examples/cancellation --task "Investigate whether Request::cancel removes queued callbacks." --output .scout/ci-comparison --max-steps 2 --max-context-chars 40
+          scout compare --repo examples/cancellation --task "Investigate whether Request::cancel removes queued callbacks." --output .scout/ci-comparison --max-steps 3 --max-followups 3 --max-context-chars 40
           python - <<'PY'
           import json
           from pathlib import Path
           from jev_scout import __version__
 
-          assert __version__ == "0.3.0"
+          assert __version__ == "0.4.0"
           investigation = Path(".scout/ci")
           assert all((investigation / name).is_file() for name in ("events.jsonl", "evidence.json", "report.md"))
           assert json.loads((investigation / "evidence.json").read_text())["observations"]
+          followups = json.loads(Path(".scout/ci-followups/evidence.json").read_text())
+          assert followups["expansion"]["generated_candidates"] > 0
+          assert len(followups["candidates"]) <= 100
+          assert len(followups["observations"]) <= followups["steps"] <= 12
+          generated = {entry["candidate_id"] for entry in followups["generated_candidate_lineage"]}
+          assert any(observation["candidate_id"] in generated for observation in followups["observations"])
           recovery = json.loads(Path(".scout/ci-recovery/recovery.json").read_text())
           assert recovery["context"]["characters"] <= 40
           assert recovery["context"]["active"][0]["observation_id"] == "o0001"
           assert recovery["observations"][0]["validity"] == "current_at_recovery_check"
           comparison = Path(".scout/ci-comparison")
           summary = json.loads((comparison / "comparison.json").read_text())
+          assert summary["schema_version"] == 2
           assert summary["agreement"]["exact_action_sequence_match"] is True
           assert summary["arms"]["challenger"]["transport"] == "none"
           for arm in ("rule", "challenger"):

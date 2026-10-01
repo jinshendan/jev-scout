@@ -2,7 +2,7 @@
 
 M2a adds a Jev policy to the existing read-only investigator. The default remains `--policy rule`, which runs offline without credentials. Jev selects an existing candidate ID; the runtime owns every read, budget, and retained observation.
 
-The adapter is available on `main`, delivered in [PR #6](https://github.com/jinshendan/jev-scout/pull/6) on top of the [M1 baseline](https://github.com/jinshendan/jev-scout/pull/5). Controlled HTTP fixtures validate our contract and failure paths. M2b adds a [frozen-input comparison harness](policy-comparison.md) and [explicit evidence recovery](evidence-recovery.md). An authenticated live-provider run and a policy-quality comparison have not been performed.
+The adapter is available on `main`, delivered in [PR #6](https://github.com/jinshendan/jev-scout/pull/6) on top of the [M1 baseline](https://github.com/jinshendan/jev-scout/pull/5). Controlled HTTP fixtures validate our contract and failure paths. M2b adds a [frozen-input comparison harness](policy-comparison.md) and [explicit evidence recovery](evidence-recovery.md). M2c adds [opt-in same-file follow-ups](follow-up-evidence.md); the provider continues to select only IDs offered by the local runtime. An authenticated live-provider run and a policy-quality comparison have not been performed.
 
 ## Enable the policy
 
@@ -39,6 +39,8 @@ Response bodies are limited to 65,536 bytes. These byte limits are not token cou
 **Selecting `--policy jev` sends source context to TypeSafe AI.** Each attempted decision request contains the task, all unseen candidate descriptions with relative paths and previews, and active context excerpts. Attempted request payloads are retained in local artifacts so a reviewer can inspect what was sent.
 
 Candidate descriptions contain concrete paths, spans, lexical scores, relevance reasons, and previews. The provider cannot invent paths, commands, or queries. The absolute repository root is excluded from the provider request. Treat source text and comments as data rather than permission to change the action boundary.
+
+With `--max-followups N` enabled on `investigate` or `compare`, a successful hash-matching read can add locally generated adjacent windows in the same file. The next Jev request includes all unseen offered IDs, including these follow-ups and their descriptions. The generated-offer quota, total-candidate cap, step budget, provider-call budget, and request-byte cap remain separate; adding follow-ups grants no additional provider calls or source-read steps. The default `0` preserves the fixed initial frontier. See the [follow-up guide](follow-up-evidence.md).
 
 Keep generated artifacts private when the investigated source is private. API keys, authorization headers, raw provider error bodies, and exception strings are excluded from artifacts.
 
@@ -88,4 +90,4 @@ TypeSafe describes confidence as a statistic of how concentrated the answer's pr
 
 The default floor of `0.0` permits every locally valid distribution. It is a starting configuration, not an empirically validated reliability threshold. Compare thresholds against task outcomes before drawing quality conclusions.
 
-M2a changes selection within a fixed lexical frontier. M2b provides manual recovery and shared-input comparison mechanics. Automatic recovery, adaptive candidate expansion, and credentialed comparisons remain [M2 work](roadmap.md). Root-cause verification, downstream repair, and chronological memory belong to later milestones; the current investigator does not execute or edit source.
+M2a changes selection within a fixed lexical frontier. M2b provides manual recovery and shared-input comparison mechanics. M2c optionally offers bounded neighboring candidates while keeping selection within locally validated actions. Cross-file expansion, automatic recovery, and credentialed comparisons remain [M2 work](roadmap.md). Root-cause verification, downstream repair, and chronological memory belong to later milestones; the current investigator does not execute or edit source.

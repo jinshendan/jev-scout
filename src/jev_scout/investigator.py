@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .artifacts import prepare_output as _prepare_output
+from .expansion import FollowupFrontier, validate_max_followups
 from .models import (
     ActionCandidate,
     ContextEntry,
@@ -90,6 +91,7 @@ def _render_report(bundle: dict) -> str:
     context = bundle["context"]
     scan = bundle["scan"]
     accounting = bundle["policy_accounting"]
+    expansion = bundle["expansion"]
     lines = [
         "# Code investigation report",
         "",
@@ -120,8 +122,16 @@ def _render_report(bundle: dict) -> str:
         f"Snippet actions: {bundle['steps']} / {bundle['limits']['max_steps']}.",
         f"Active excerpt characters: {context['characters']} / {context['max_chars']}.",
         f"Discovery truncated: `{scan['truncated']}`. "
-        f"Retained candidates: {len(bundle['candidates'])} / {scan['candidate_total']} discovered; "
+        f"Retained candidates: {expansion['initial_candidates']} / "
+        f"{scan['candidate_total']} discovered; "
         f"candidate truncation: `{scan['candidate_truncated']}`.",
+        f"Generated follow-up candidates: {expansion['generated_candidates']} / "
+        f"{expansion['max_followups']}; suppressed proposals: "
+        f"{expansion['suppressed_proposals']}. Total retained actions: "
+        f"{len(bundle['candidates'])} / {bundle['limits']['max_candidates']}.",
+        f"Follow-up expansion enabled: `{expansion['enabled']}`; "
+        f"algorithm: `{expansion['algorithm']}`; "
+        f"neighbor window limit: {expansion['window_lines']} lines.",
         f"Discovery attempted {scan['scanned_files']} file reads and read "
         f"{scan['scanned_bytes']} bytes. Skipped entries: `{dict(scan['skipped'])}`.",
         f"Deferred retained candidates: {len(bundle['deferred_candidate_ids'])}. "
@@ -173,6 +183,11 @@ def _render_report(bundle: dict) -> str:
             "",
             "Candidates come from filename and keyword matching. Missing candidates, "
             "skipped files, and the action budget can prevent relevant evidence from being found.",
+            "When enabled, follow-ups add adjacent windows only within initially retained "
+            "candidate files after a successful hash-matching read. Policies still choose "
+            "offered actions. Candidate quotas count generated offers, not successful reads. "
+            "Requested spans and previews do not establish complete file coverage; retained "
+            "excerpts can be truncated, including within a long source line.",
             "Context eviction and truncation affect only the active projection. "
             "Raw observations remain in events.jsonl and evidence.json.",
             "Source hashes describe snapshots; re-check sources before using these observations "
@@ -193,6 +208,8 @@ def investigate(
     max_steps: int = 8,
     max_context_chars: int = 12000,
     policy: Policy | None = None,
+    *,
+    max_followups: int = 0,
 ) -> InvestigationResult:
     """Inspect bounded snippets, with complete raw evidence and no repository writes."""
     if not task.strip():
@@ -202,11 +219,18 @@ def investigate(
         for budget in (max_steps, max_context_chars)
     ):
         raise ValueError("Step and context budgets must be positive integers.")
+    validate_max_followups(max_followups)
     policy = RulePolicy() if policy is None else policy
     with SafeRepository(Path(repo)) as repository:
         destination = _prepare_output(Path(output), repository.root)
         return _run_investigation(
-            repository, task, destination, max_steps, max_context_chars, policy
+            repository,
+            task,
+            destination,
+            max_steps,
+            max_context_chars,
+            policy,
+            max_followups=max_followups,
         )
 
 
@@ -221,6 +245,7 @@ def _run_investigation(
     frontier: tuple[list[ActionCandidate], list[str]] | None = None,
     source_mode: str = "live",
     snapshot_id: str | None = None,
+    max_followups: int = 0,
 ) -> InvestigationResult:
     """Execute a live or prepared frontier in an already validated output directory."""
     if source_mode not in {"live", "frozen"}:
@@ -241,8 +266,11 @@ def _run_investigation(
             policy_config=policy_config,
             source_mode=source_mode,
             snapshot_id=snapshot_id,
+            max_followups=max_followups,
         )
         candidates, terms = repository.discover(task) if frontier is None else frontier
+        initial_candidate_ids = [candidate.id for candidate in candidates]
+        expansion = FollowupFrontier(candidates, max_followups)
         events.emit(
             "candidates_discovered",
             terms=terms,
@@ -319,6 +347,24 @@ def _run_investigation(
             observations.append(observation)
             events.emit("observation_recorded", observation=observation)
             _add_context(active, observation, max_context_chars, events, evicted)
+            if max_followups:
+                additions = expansion.expand(candidate, source, observation["id"])
+                for generated in additions:
+                    followup = generated.candidate
+                    candidates.append(followup)
+                    by_id[followup.id] = followup
+                    events.emit(
+                        "candidate_generated",
+                        **generated.to_dict(),
+                        candidate=followup.to_dict(),
+                    )
+                events.emit(
+                    "frontier_expansion_checked",
+                    parent_candidate_id=chosen,
+                    parent_observation_id=observation["id"],
+                    generated_candidate_ids=[entry.candidate.id for entry in additions],
+                    expansion=expansion.describe(),
+                )
         else:
             if candidates:
                 stop_reason = (
@@ -372,10 +418,14 @@ def _run_investigation(
                 "max_scan_files": MAX_SCAN_FILES,
                 "max_scan_entries": MAX_SCAN_ENTRIES,
                 "max_candidates": MAX_CANDIDATES,
+                "max_followups": max_followups,
             },
             "scan": repository.stats,
             "terms": terms,
             "candidates": [c.to_dict() for c in candidates],
+            "initial_candidate_ids": initial_candidate_ids,
+            "expansion": expansion.describe(),
+            "generated_candidate_lineage": [entry.to_dict() for entry in expansion.lineage],
             "deferred_candidate_ids": [c.id for c in candidates if c.id not in seen],
             "observations": observations,
             "context": {

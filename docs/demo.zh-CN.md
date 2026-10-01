@@ -2,7 +2,7 @@
 
 [English](demo.md) · [简体中文](demo.zh-CN.md)
 
-本教程使用虚构的 C++ 源码树 `examples/cancellation`，展示 Jev Scout 第一个里程碑的能力：只读搜索仓库并记录源码证据。教程不会编译示例、执行回调、复现缺陷、确定根因，也不会提出已经验证的修复。
+本教程使用虚构的 C++ 源码树 `examples/cancellation`，展示 Jev Scout 0.4.0 的能力：只读搜索仓库、记录源码证据、可选的相邻读取、显式恢复和冻结输入下的策略比较。教程不会编译示例、执行回调、复现缺陷、确定根因，也不会提出已经验证的修复。
 
 ## 运行调查
 
@@ -33,6 +33,26 @@ scout investigate \
 
 每条命令都应使用位于 `examples/cancellation` 之外的新输出目录。如果先前运行已经生成了 `.scout/demo`，请换一个目录名，并在下面的恢复命令中使用同一个新名称。
 
+## 检查相邻源码
+
+开启相邻证据扩展，运行一次新的调查：
+
+```sh
+scout investigate \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/followup-demo \
+  --max-steps 12 \
+  --max-context-chars 1200 \
+  --max-followups 6
+```
+
+本次运行中，运行时最多可以提供六个新候选，每个都是成功读取过的文件中紧邻原窗口、最多九行的片段。下一步动作仍由规则策略选择，所有被选中的读取共用十二步预算。默认的 `--max-followups 0` 保留原有固定候选集合。
+
+对照 `.scout/followup-demo/evidence.json` 中的 `initial_candidate_ids`、`generated_candidate_lineage` 和 `expansion`。每个新增候选都关联允许生成它的候选与观察记录。`candidate_generated` 事件保留完整候选和父记录 ID；`frontier_expansion_checked` 事件记录扩展数量与生成的 ID。所提供候选可能最终未被选中，但仍然消耗配额。
+
+相邻窗口不会搜索新文件，也不能证明完整覆盖。长行可能超过 4,000 字符的片段限制。若仍缺少证据，可扩大英文任务的范围，或手动检查源码。确切限制与父子关系见[相邻扩展指南（英文）](follow-up-evidence.md)。
+
 ## 恢复一条已保留的观察
 
 在生成的 `evidence.json` 中找到观察 ID，然后显式请求恢复。第一条观察的 ID 通常是 `o0001`：
@@ -61,9 +81,23 @@ scout compare \
   --max-context-chars 1200
 ```
 
-默认挑战者是另一个新建的规则策略。两组都使用一次捕获的候选集合和源码内容。查看 `comparison.json`、顶层的 `report.md`，以及 `rule/` 和 `challenger/` 下的标准证据包。冻结观察描述的是已捕获的内容；单独的工作区检查会说明运行结束后原始文件是否仍然匹配。
+默认挑战者是另一个新建的规则策略。两组都使用一次捕获的初始候选集合和源码内容。查看 `comparison.json`、顶层的 `report.md`，以及 `rule/` 和 `challenger/` 下的标准证据包。冻结观察描述的是已捕获的内容；单独的工作区检查会说明运行结束后原始文件是否仍然匹配。
 
 两组规则决策一致，只能作为一致性检查，不能视为质量或成本结论。`--challenger jev` 会显式启用向 TypeSafe 传输源码，并要求设置环境变量中的密钥。在私有源码上运行前，请阅读[策略比较指南（英文）](policy-comparison.md)。本 demo 尚未证明真实 Jev 调用的收益。
+
+若要在两个离线比较分支中使用同样的相邻扩展设置：
+
+```sh
+scout compare \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/followup-comparison \
+  --max-steps 12 \
+  --max-context-chars 1200 \
+  --max-followups 6
+```
+
+两组共享初始候选和捕获的源码，后续菜单根据各自成功的读取生成。比较 schema 2 保留各分支内的候选 ID，但按源码与动作身份衡量一致性。请将各分支的 `expansion` 记录与一致性数值一起检查。
 
 ## 阅读证据
 

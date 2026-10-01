@@ -76,17 +76,43 @@ Acceptance checks: evicted observations can be requested without losing their or
 
 This increment provides comparison mechanics, not live Jev validation or a policy-quality result. Sequential capture is not an atomic repository snapshot. Recovery is manual and does not resume the investigation or generate additional candidates.
 
+### M2c — Bounded neighboring evidence
+
+**Implemented in this increment, version 0.4.0:** allow either policy to select locally generated adjacent snippets after successful source inspection. See the [follow-up guide](follow-up-evidence.md), [comparison guide](policy-comparison.md), and [ADR 0004](adr/0004-bounded-follow-up-evidence.md).
+
+**Delivery:** [PR #9](https://github.com/jinshendan/jev-scout/pull/9).
+
+```sh
+scout investigate --repo PATH --task TEXT --output DIR \
+  --max-steps N --max-context-chars N --max-followups N
+scout compare --repo PATH --task TEXT --output DIR \
+  --max-steps N --max-context-chars N --max-followups N --challenger rule
+```
+
+Delivered scope:
+
+- Opt-in `--max-followups` from 0 through 100, defaulting to zero to preserve the fixed-frontier baseline.
+- At most nine-line windows immediately before or after a successfully read candidate in the same hash-matching file.
+- A quota on generated offers and a shared 100-candidate cap; generated reads consume the existing step/context budgets.
+- Duplicate suppression, parent candidate/observation lineage, explicit expansion accounting, and ordinary rule/Jev selection over offered IDs.
+- Frozen comparisons sharing initial candidates, source, expansion rules, and limits, with independent later menus.
+- Comparison schema 2 behavioral diagnostics based on source/action identity rather than arm-local candidate IDs; investigation schema 2 and recovery imports remain compatible.
+
+Acceptance checks: failed or hash-mismatched reads cannot seed candidates; generated coordinates stay in the parent file and carry its expected hash; IDs remain unique; offer and total-candidate limits are visible; evicted context does not erase evidence or lineage; different arm-local IDs cannot create false agreement or disagreement; source mutation cannot change a frozen follow-up's content.
+
+This increment expands neighboring evidence only. It does not rescan, discover new files, automatically recover context, resume a run, or add a solver. Excerpts and finite budgets can leave coverage gaps. Live Jev compatibility and task-quality gains remain unvalidated.
+
 ### Remaining M2 work
 
 The following remain planned:
 
-- Policy-requested additional evidence and automatic recovery of context-evicted observations.
-- Adaptive candidate generation with explicit coverage and revision checks.
+- Policy-requested cross-file evidence and automatic recovery of context-evicted observations.
+- Candidate expansion beyond adjacent windows with explicit coverage and revision checks.
 - Real rule-versus-Jev rollouts using the shared-input harness and a disclosed task set.
 - Credentialed provider validation and reporting of model behavior and actual usage.
 - Trace links between investigations and subsequent work.
 
-Exit criterion: publish credentialed rule-versus-Jev comparisons using the same source inputs, candidates, limits, and evidence contract, with reported provider behavior and usage. Invalid or unavailable provider responses have an explicit fallback. Inspectable traces must support evidence expansion and links to subsequent work. No benchmark benefit is assumed.
+Exit criterion: publish credentialed rule-versus-Jev comparisons using the same source inputs, initial candidates, expansion rules, limits, and evidence contract, with reported provider behavior and usage. Later menus may depend on each policy's choices and must remain traceable. Invalid or unavailable provider responses have an explicit fallback. Inspectable traces must support evidence expansion and links to subsequent work. No benchmark benefit is assumed.
 
 ## M3 — Fixed solver and controlled evaluation
 
