@@ -1,5 +1,7 @@
 # Jev Scout architecture
 
+[English](architecture.md) · [简体中文](architecture.zh-CN.md)
+
 Jev Scout investigates a repository and produces inspectable evidence before a coding agent attempts a change. M1 implements a read-only, offline rule baseline. M2a adds an optional Jev candidate selector; M2b adds explicit evidence recovery and shared-input policy comparisons. The runtime uses Python 3.11+ and the standard library. It does not produce a repair.
 
 The design separates evidence collection, bounded working context, and the policy that chooses what to inspect next. Provider-specific behavior belongs behind a policy adapter; evidence ownership and source attribution stay local.

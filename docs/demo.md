@@ -1,5 +1,7 @@
 # Investigating a cancellation path
 
+[English](demo.md) · [简体中文](demo.zh-CN.md)
+
 This walkthrough uses `examples/cancellation`, a fictional C++ source tree, to
 demonstrate Jev Scout's first milestone: read-only repository search and recorded
 source evidence. It does not compile the example, execute a callback, reproduce
