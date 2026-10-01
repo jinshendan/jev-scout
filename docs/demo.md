@@ -3,8 +3,8 @@
 [English](demo.md) · [简体中文](demo.zh-CN.md)
 
 This walkthrough uses `examples/cancellation`, a fictional C++ source tree, to
-demonstrate Jev Scout 0.4.0: read-only repository search, recorded source evidence,
-optional neighboring reads, explicit recovery, and frozen policy comparisons.
+demonstrate Jev Scout 0.5.0: read-only repository search, recorded source evidence,
+optional neighboring reads, policy-selected context restoration, explicit recovery, and frozen policy comparisons.
 It does not compile the example, execute a callback, reproduce a defect,
 determine a root cause, or propose a verified fix.
 
@@ -80,6 +80,39 @@ lines can exceed the 4,000-character excerpt limit. If evidence is still missing
 broaden the English task or inspect the source manually. See the
 [follow-up guide](follow-up-evidence.md) for exact limits and lineage.
 
+## Restore context within the same run
+
+Use a small context budget to make eviction visible, then allow the policy to
+select restoration actions:
+
+```sh
+scout investigate \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/restoration-demo \
+  --max-steps 12 \
+  --max-context-chars 40 \
+  --max-restores 3
+```
+
+`--max-restores 3` admits at most three restoration offers, each for a different
+observation evicted by this run. The default is zero. The rule policy first
+selects unseen reads, then offered restorations; a Jev policy can choose from
+both action kinds. Every selected action consumes the same twelve-step budget,
+including a restoration omitted because its source no longer matches.
+
+Inspect the candidate kinds, restoration accounting, action events, and active
+observation IDs in `.scout/restoration-demo/evidence.json` and `events.jsonl`.
+Successful restoration rechecks the original path, source hash, span, excerpt,
+and truncation. It reuses the original observation ID and retained text rather
+than recording a new observation. A forty-character projection can truncate an
+excerpt and evict another projection; neither event deletes raw evidence.
+Each observation can receive only one restoration offer, even if evicted again.
+
+This demonstrates a bounded interface for revisiting evidence. It does not
+establish that restored evidence helps solve the task. See the
+[context restoration guide](policy-context-restoration.md).
+
 ## Recover a retained observation
 
 Find an observation ID in the generated `evidence.json`, then request it
@@ -137,9 +170,28 @@ scout compare \
 ```
 
 Both arms share the initial candidates and captured source; their later menus
-are generated from their own successful reads. Comparison schema 2 retains
+are generated from their own successful reads. Comparison schema 3 retains
 each arm's local candidate IDs but measures agreement by source/action identity.
 Inspect the per-arm `expansion` records alongside the agreement values.
+
+To exercise restoration in both offline arms:
+
+```sh
+scout compare \
+  --repo examples/cancellation \
+  --task 'Investigate whether Request::cancel removes queued callbacks.' \
+  --output .scout/restoration-comparison \
+  --max-steps 12 \
+  --max-context-chars 40 \
+  --max-restores 3
+```
+
+Check `action_counts`, `successful_restores`, and `restoration_checks` in each
+arm's comparison summary. Restoration validates captured source, while the
+checkout is checked separately after both arms. Agreement distinguishes reads
+from restorations and excludes arm-local observation IDs. Restoring evidence
+does not add to observed-source overlap. Rule-versus-rule agreement is still a
+sanity check, with no measured policy-quality benefit.
 
 ## Read the evidence
 

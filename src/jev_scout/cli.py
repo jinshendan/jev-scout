@@ -68,6 +68,12 @@ def _add_investigation_arguments(command: argparse.ArgumentParser):
         default=0,
         help="Maximum generated same-file neighbor candidates, 0-100 (default: disabled).",
     )
+    command.add_argument(
+        "--max-restores",
+        type=int,
+        default=0,
+        help="Maximum generated evicted-observation restoration offers, 0-100 (default: disabled).",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -112,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.max_context_chars,
                 challenger_factory=lambda: challenger,
                 max_followups=args.max_followups,
+                max_restores=args.max_restores,
             )
             print(f"Compared two fresh policy runs on snapshot {result.snapshot_id}.")
             print("Action agreement describes behavior, not task quality or repair success.")
@@ -125,10 +132,9 @@ def main(argv: list[str] | None = None) -> int:
                 args.max_context_chars,
                 policy,
                 max_followups=args.max_followups,
+                max_restores=args.max_restores,
             )
-            print(
-                f"Collected {result.observations} observations in {result.steps} snippet actions."
-            )
+            print(f"Collected {result.observations} observations in {result.steps} total actions.")
             print(f"Stop reason: {result.stop_reason}")
     except (ValueError, OSError) as exc:
         print(f"scout: {exc}", file=sys.stderr)

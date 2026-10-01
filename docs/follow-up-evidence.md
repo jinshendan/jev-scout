@@ -66,15 +66,18 @@ commands, or coordinates; it remains a closed-choice selector. See the
 | Limit | Meaning |
 | --- | --- |
 | `--max-followups` | Maximum admitted generated candidates, including offers never selected |
-| 100 total candidates | Initial discovery plus generated candidates share this global cap |
-| `--max-steps` | All selected snippet actions, including skipped actions, share the same budget |
+| 100 total candidates | Initial discovery, follow-ups, and restoration offers share this global cap |
+| `--max-steps` | All selected read and restoration actions, including skipped actions, share the same budget |
 | Nine lines | Maximum proposed neighboring window; a file boundary can shorten it |
 | 4,000 excerpt characters | Maximum retained text per ordinary CLI candidate read |
 | `--max-context-chars` | Active excerpt characters; context eviction still preserves raw observations |
 
 Adding follow-ups does not reset any budget. An initially full 100-candidate
 frontier leaves no expansion capacity. An admitted offer consumes its quota
-even if the run later stops before selecting it. A step budget can end the run
+even if the run later stops before selecting it. With both generation options
+enabled, follow-ups after a successful read are admitted before restoration
+offers triggered by that read's context evictions. This stable order is visible
+in events and matters when shared candidate capacity is nearly full. A step budget can end the run
 with unseen follow-ups still in the frontier. Provider calls and request bytes
 remain separate budgets; a larger menu can trigger explicit rule fallback.
 
@@ -86,7 +89,7 @@ of a necessary file. A missing observation does not prove a path is absent.
 
 ## Read the expansion trace
 
-Investigation `evidence.json` remains schema 2 and adds:
+Investigation `evidence.json` schema 3 retains the expansion fields introduced in schema 2:
 
 - `initial_candidate_ids`: the candidates discovered before the loop.
 - `generated_candidate_lineage`: records with `candidate_id`,
@@ -113,7 +116,7 @@ report summarizes initial discovery, generated offers, quota usage, and limits.
 Evicting the parent from working context does not erase the original observation
 or the candidate's lineage.
 
-Recovery accepts these schema 2 investigation bundles through its existing
+Recovery accepts schema 1, 2, and 3 investigation bundles through its existing
 bounded observation contract. It checks selected excerpts against explicit
 current source and does not resume expansion. See [evidence recovery](evidence-recovery.md).
 
@@ -125,16 +128,18 @@ task, expansion settings, and budgets. Each arm derives its own later menus from
 its successful choices; no new file enters the capture.
 
 Generated IDs depend on exploration order, so they are useful only within an
-arm. Comparison schema 2 computes agreement from `kind`, `path`,
+arm. Comparison schema 3 computes agreement from `kind`, `path`,
 `expected_sha256`, `start_line`, `end_line`, and `max_chars`, while retaining
 local IDs for trace lookup. Shared source does not imply identical later menus.
 See [policy comparison](policy-comparison.md).
 
 ## Remaining work
 
-This increment does not rescan, discover cross-file relationships, recover
-evicted context automatically, resume a run, edit source, execute investigated
-code, or add a repair solver. It does not establish live Jev compatibility,
+Follow-ups do not rescan, discover cross-file relationships, resume a run, edit
+source, execute investigated code, or add a repair solver. Version 0.5.0
+separately offers opt-in [policy-selected context restoration](policy-context-restoration.md).
+Restoration has its own generated-offer quota while sharing candidate capacity
+and action steps with follow-ups; a restored observation does not seed neighbors. It does not establish live Jev compatibility,
 quality, latency, or monetary benefit. Those boundaries and further work are
 recorded in the [architecture](architecture.md), [roadmap](roadmap.md), and
 [ADR 0004](adr/0004-bounded-follow-up-evidence.md).
