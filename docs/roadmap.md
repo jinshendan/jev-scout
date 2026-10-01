@@ -80,6 +80,8 @@ This increment provides comparison mechanics, not live Jev validation or a polic
 
 **Implemented in this increment, version 0.4.0:** allow either policy to select locally generated adjacent snippets after successful source inspection. See the [follow-up guide](follow-up-evidence.md), [comparison guide](policy-comparison.md), and [ADR 0004](adr/0004-bounded-follow-up-evidence.md).
 
+**Delivery:** [PR #9](https://github.com/jinshendan/jev-scout/pull/9).
+
 ```sh
 scout investigate --repo PATH --task TEXT --output DIR \
   --max-steps N --max-context-chars N --max-followups N

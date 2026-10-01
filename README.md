@@ -56,7 +56,7 @@ See the [architecture document](docs/architecture.md) and [design decisions](doc
 | M3 — Repair and evaluation | Fixed downstream solver, executable verification, paired experiments | Does investigation improve the success–cost tradeoff end to end? |
 | M4 — Repository memory | Version-aware reuse, invalidation, chronological evaluation | When does accumulated experience help, and when should it be ignored? |
 
-The M1 baseline and M2a adapter were delivered in [PR #5](https://github.com/jinshendan/jev-scout/pull/5) and [PR #6](https://github.com/jinshendan/jev-scout/pull/6). [PR #7](https://github.com/jinshendan/jev-scout/pull/7) adds M2b recovery and controlled comparison inputs. Each milestone is delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
+The M1 baseline and M2a adapter were delivered in [PR #5](https://github.com/jinshendan/jev-scout/pull/5) and [PR #6](https://github.com/jinshendan/jev-scout/pull/6). [PR #7](https://github.com/jinshendan/jev-scout/pull/7) adds M2b recovery and controlled comparison inputs; [PR #9](https://github.com/jinshendan/jev-scout/pull/9) adds M2c neighboring evidence. Each milestone is delivered in focused PRs with an updated roadmap and relevant verification. See [open issues](https://github.com/jinshendan/jev-scout/issues) for the active work.
 
 ## Quick start
 

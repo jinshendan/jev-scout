@@ -80,6 +80,8 @@ scout compare --repo PATH --task TEXT --output DIR \
 
 **本增量已实现，版本 0.4.0：** 成功检查源码之后，允许两种策略选择由本地生成的相邻片段。详见[相邻扩展指南（英文）](follow-up-evidence.md)、[策略比较指南（英文）](policy-comparison.md)和 [ADR 0004（英文）](adr/0004-bounded-follow-up-evidence.md)。
 
+**交付：** [PR #9](https://github.com/jinshendan/jev-scout/pull/9)。
+
 ```sh
 scout investigate --repo PATH --task TEXT --output DIR \
   --max-steps N --max-context-chars N --max-followups N
