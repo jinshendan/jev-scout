@@ -6,9 +6,9 @@
 
 Jev Scout explores a repository, keeps source-backed observations recoverable, and hands bounded working context alongside inspectable evidence to a developer or a coding agent. Its research goal is to determine when a decision model such as Jev can improve the cost and reliability of code investigation.
 
-**Status:** Alpha. The offline investigator, optional typed Jev selector, **explicit evidence recovery**, and **frozen policy-comparison harness** are implemented. Live provider validation, adaptive candidate expansion, repair evaluation, and repository memory remain unfinished. No efficiency or repair-success claims have been established.
+**Status:** Alpha, version 0.4.0. The offline investigator, optional typed Jev selector, **explicit evidence recovery**, **frozen policy-comparison harness**, and **opt-in adjacent-source follow-ups** are implemented. Cross-file expansion, automatic recovery, live provider validation, repair evaluation, and repository memory remain unfinished. No efficiency or repair-success claims have been established.
 
-[Quick start](#quick-start) · [Recovery](docs/evidence-recovery.md) · [Comparisons](docs/policy-comparison.md) · [Jev policy](docs/jev-policy.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+[Quick start](#quick-start) · [Follow-ups](docs/follow-up-evidence.md) · [Recovery](docs/evidence-recovery.md) · [Comparisons](docs/policy-comparison.md) · [Jev policy](docs/jev-policy.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 ## The problem
 
@@ -24,7 +24,7 @@ The runtime keeps the evidence behind those decisions inspectable. A selected fi
 
 ## Architecture
 
-This is the target architecture. The current runtime discovers a fixed lexical frontier once and reads selected excerpts. Rules or Jev choose among those candidates; adaptive search and model reasoning are later extensions.
+This is the target architecture. The current runtime discovers a lexical frontier once and reads selected excerpts. By default that frontier stays fixed. Opt-in follow-ups let the runtime offer bounded neighboring snippets in a successfully inspected file; rules or Jev select from the offered IDs. Cross-file search and model reasoning are later extensions.
 
 ```mermaid
 flowchart LR
@@ -43,7 +43,7 @@ flowchart LR
 
 The default policy is deterministic and runs without an API key. Explicitly selecting Jev enables a remote backend behind `Policy.choose(state, candidates)`. Jev chooses an existing candidate ID; local code validates the response and executes the read. Provider failures and low-confidence answers fall back to rules while remaining visible in the trace.
 
-Explicit recovery rebuilds bounded context from retained observation IDs after checking them against current source. Comparisons capture one bounded frontier and source snapshot for both policies, so later source changes cannot give the two arms different read content.
+Explicit recovery rebuilds bounded context from retained observation IDs after checking them against current source. Comparisons capture one bounded initial frontier and source snapshot for both policies, so later source changes cannot give the two arms different read content. With follow-ups enabled, each arm's later menus depend on its own choices while sharing the same expansion rules and limits.
 
 See the [architecture document](docs/architecture.md) and [design decisions](docs/adr/) for boundaries and tradeoffs.
 
@@ -52,7 +52,7 @@ See the [architecture document](docs/architecture.md) and [design decisions](doc
 | Milestone | Deliverable | Acceptance question |
 | --- | --- | --- |
 | M1 — Local evidence baseline | Available on main: read-only investigation, bounded context, raw events, evidence bundle, source-linked report | Can a run preserve and expose useful source evidence reproducibly? |
-| M2 — Jev decision backend | Typed selection, fallback, accounting, explicit recovery, and frozen comparisons. Live validation and adaptive expansion remain pending. | Does Jev improve candidate selection over the rule baseline? |
+| M2 — Jev decision backend | Typed selection, fallback, accounting, explicit recovery, frozen comparisons, and bounded same-file follow-ups. Cross-file expansion, automatic recovery, and live validation remain pending. | Does Jev improve candidate selection over the rule baseline? |
 | M3 — Repair and evaluation | Fixed downstream solver, executable verification, paired experiments | Does investigation improve the success–cost tradeoff end to end? |
 | M4 — Repository memory | Version-aware reuse, invalidation, chronological evaluation | When does accumulated experience help, and when should it be ignored? |
 
@@ -97,6 +97,24 @@ scout investigate --repo /path/to/repository \
 
 `--max-steps` bounds snippet actions, including skipped actions. `--max-context-chars` bounds active excerpt characters, not tokens or the size of retained artifacts. The result also records fixed discovery, source-read, and candidate limits. Automatic run resumption is future work.
 
+## Request neighboring source evidence
+
+Enable a bounded expansion beyond the initial lexical windows:
+
+```sh
+scout investigate \
+  --repo examples/cancellation \
+  --task "Investigate whether Request::cancel removes queued callbacks." \
+  --output .scout/followup-demo \
+  --max-steps 12 \
+  --max-context-chars 1200 \
+  --max-followups 6
+```
+
+After a successful hash-matching read, the runtime can offer up to two adjacent snippets in the same file, each at most nine lines. The existing policy selects these candidates; Jev cannot invent coordinates. `--max-followups` accepts 0–100 and defaults to `0`, preserving the fixed-frontier baseline. The quota counts generated offers, whether or not they are selected. Initial and generated candidates together are capped at 100, and every selected read shares the existing `--max-steps` budget.
+
+Inspect `expansion` and `generated_candidate_lineage` in `evidence.json`, plus the ordered events, to see limits, parent candidates, parent observations, and directions. Follow-ups do not scan new files, recover context automatically, or guarantee whole-file coverage. See the [follow-up guide](docs/follow-up-evidence.md).
+
 ## Recover evidence and compare policies
 
 Recover a retained observation even if it was evicted from the original working context:
@@ -124,6 +142,8 @@ scout compare \
 ```
 
 The result contains `comparison.json`, `report.md`, and each arm's normal artifacts under `rule/` and `challenger/`. Read the [comparison guide](docs/policy-comparison.md) before adding `--challenger jev`: that enables remote source transmission and requires `TYPESAFE_API_KEY`. Shared inputs and behavioral diagnostics make a comparison inspectable; they do not establish evidence quality or repair success.
+
+`compare` also accepts `--max-followups`. Both arms share captured source, the initial frontier, and expansion settings; their later offered candidates can diverge after different choices. Comparison schema 2 matches actions by source identity and span rather than arm-local candidate IDs.
 
 All output directories must be fresh and outside the investigated repository. Choose new names when repeating these examples.
 
@@ -176,6 +196,15 @@ M2a changes candidate selection within the fixed frontier. It does not generate 
 - Offline rule-versus-rule sanity checks and opt-in rule-versus-Jev comparisons.
 
 The captured source is bounded and sequential, not an atomic repository snapshot or Git commit. Agreement and overlap describe policy behavior; they are not correctness scores. Recovery does not resume a run or prove an imported artifact's authenticity. See [ADR 0003](docs/adr/0003-recovery-and-frozen-comparisons.md).
+
+## Implemented in M2c
+
+- Optional same-file adjacent windows after successful source-validated reads.
+- A generated-offer quota, a shared 100-candidate cap, and unchanged read/context budgets.
+- Parent candidate/observation lineage and explicit expansion accounting in events, evidence, and reports.
+- Frozen comparisons with the same initial frontier and expansion settings, independent later menus, and semantic action agreement.
+
+This is bounded neighboring evidence, not cross-file discovery, an automatic recovery loop, or a repair solver. Nine-line windows and 4,000-character excerpts can leave gaps or truncate long lines. See [ADR 0004](docs/adr/0004-bounded-follow-up-evidence.md).
 
 ## Development
 

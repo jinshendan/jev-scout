@@ -1,6 +1,6 @@
 # Comparing policies on shared inputs
 
-`scout compare` runs two independent investigation arms over one bounded capture. It fixes task text, candidates, source read content, and budgets so a source change between arms cannot silently change their evidence. This is a comparison harness, not a repair benchmark or a claim that Jev is better than rules.
+`scout compare` runs two independent investigation arms over one bounded capture. It fixes task text, initial candidates, source read content, expansion rules, and budgets so a source change between arms cannot silently change their evidence. The default keeps the frontier fixed; opt-in follow-ups derive later menus from each arm's own choices. This is a comparison harness, not a repair benchmark or a claim that Jev is better than rules.
 
 ## Start offline
 
@@ -45,7 +45,25 @@ The snapshot ID hashes a canonical manifest containing task text, relative candi
 
 Complete captured source exists only in memory during the paired run. `comparison.json` retains the manifest, and arm bundles retain selected excerpts. These artifacts cannot reconstruct unobserved source or rerun the comparison after the checkout changes. Keep the original permitted repository revision separately when later reproduction is required.
 
-The rule arm runs first, followed by the challenger. Each receives fresh policy state, its own active context, and a separate artifact directory. Jev can choose a different sequence using its own accumulated context. It cannot generate a new candidate or read source outside the captured frontier.
+The rule arm runs first, followed by the challenger. Each receives fresh policy state, its own active context, and a separate artifact directory. Jev can choose a different sequence using its own accumulated context. The provider cannot generate coordinates or read source outside the captured files.
+
+## Compare with adjacent follow-ups
+
+Both arms accept the same optional generated-candidate budget:
+
+```sh
+scout compare \
+  --repo examples/cancellation \
+  --task "Investigate whether Request::cancel removes queued callbacks." \
+  --output .scout/followup-comparison \
+  --max-steps 12 \
+  --max-context-chars 1200 \
+  --max-followups 6
+```
+
+`--max-followups` is an integer from 0 through 100, defaulting to `0`. A successful read lets the local runtime offer same-file adjacent windows of at most nine lines. Both arms share the initial frontier, the entire captured content for those files, the expansion algorithm, and all budgets. Generated offers count against each arm's quota and the shared initial-plus-generated 100-candidate cap; selected follow-up reads use its existing step budget.
+
+Later menus can differ because they depend on each arm's prior choices. This is part of the policy treatment, not unequal underlying source input. A candidate ID such as `c0007` is local to an arm and can refer to different spans after different exploration orders. Do not compare these IDs directly. See the [follow-up guide](follow-up-evidence.md) for source checks, suppression, and lineage.
 
 ## Read the output
 
@@ -67,8 +85,10 @@ Each arm emits normal investigation schema 2 artifacts with `source_mode: "froze
 
 The top-level artifacts report discovery/capture elapsed time, whole-arm elapsed times, total comparison time through summary construction, provider attempts, actual backend choices, fallback, and reported or unknown usage. Total time includes output preparation and final checkout revalidation but excludes publication of the final comparison summary files. Missing usage remains unknown. A timed-out provider request may have consumed resources even when no token counts were returned.
 
-`positional_action_agreement` compares action IDs at corresponding positions; `observed_candidate_jaccard` measures overlap of candidates that produced observations. An empty denominator is null. These are behavioral diagnostics, not evidence-usefulness, root-cause, repair-success, or savings scores. A rule-versus-Jev run with fallback may mostly compare rules with rules; inspect actual selector counts before interpreting it. Recovery is a separate command, so this comparison does not test a recovery treatment.
+`comparison.json` now uses schema 2; its snapshot manifest remains schema 1. Each arm retains local `action_candidate_ids` and `observed_candidate_ids` for trace lookup alongside `action_identities` and `observed_action_identities`. It also records `initial_candidate_count`, `generated_candidate_count`, and `expansion`.
+
+`agreement.identity_basis` lists `kind`, `path`, `expected_sha256`, `start_line`, `end_line`, and `max_chars`. `positional_action_agreement` compares these semantic identities at corresponding positions, while `observed_candidate_jaccard` measures identity overlap among actions that produced observations. Their numeric field names remain unchanged from schema 1, but their basis has changed from local IDs to source/action identities. An empty denominator is null. These are behavioral diagnostics, not evidence-usefulness, root-cause, repair-success, or savings scores. A rule-versus-Jev run with fallback may mostly compare rules with rules; inspect actual selector counts before interpreting it. Recovery is a separate command, so this comparison does not test a recovery treatment.
 
 The arms run sequentially, so ordering, filesystem caches, and provider load can affect latency. Shared capture cost is reported once; disclose how you allocate it when comparing per-arm cost. Controlled injected transports used by tests are labeled as fixtures or injected calls and are not live-provider measurements.
 
-The [evaluation protocol](evaluation.md) defines the remaining task-quality and end-to-end work. See also the [architecture](architecture.md), [roadmap](roadmap.md), and [ADR 0003](adr/0003-recovery-and-frozen-comparisons.md).
+The [evaluation protocol](evaluation.md) defines the remaining task-quality and end-to-end work. See also the [architecture](architecture.md), [roadmap](roadmap.md), [ADR 0003](adr/0003-recovery-and-frozen-comparisons.md), and [ADR 0004](adr/0004-bounded-follow-up-evidence.md).
