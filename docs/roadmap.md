@@ -104,7 +104,7 @@ This increment expands neighboring evidence only. It does not rescan, discover n
 
 ### M2d — Policy-selected context restoration
 
-**Implemented in this increment, version 0.5.0:** let either policy select a runtime-generated action that restores an observation evicted from the current run's context. See the [restoration guide](policy-context-restoration.md), [recovery guide](evidence-recovery.md), and [ADR 0005](adr/0005-policy-context-restoration.md).
+**Implemented in this increment, version 0.5.0, [PR #10](https://github.com/jinshendan/jev-scout/pull/10):** let either policy select a runtime-generated action that restores an observation evicted from the current run's context. See the [restoration guide](policy-context-restoration.md), [recovery guide](evidence-recovery.md), and [ADR 0005](adr/0005-policy-context-restoration.md).
 
 ```sh
 scout investigate --repo PATH --task TEXT --output DIR \

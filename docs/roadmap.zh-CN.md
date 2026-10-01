@@ -104,7 +104,7 @@ scout compare --repo PATH --task TEXT --output DIR \
 
 ### M2d — 由策略选择的上下文恢复
 
-**本增量已实现，版本 0.5.0：** 允许两种策略选择由运行时生成的动作，恢复本次运行中被移出上下文的观察。详见[恢复指南（英文）](policy-context-restoration.md)、[显式证据恢复指南（英文）](evidence-recovery.md)和 [ADR 0005（英文）](adr/0005-policy-context-restoration.md)。
+**本增量已实现，版本 0.5.0，[PR #10](https://github.com/jinshendan/jev-scout/pull/10)：** 允许两种策略选择由运行时生成的动作，恢复本次运行中被移出上下文的观察。详见[恢复指南（英文）](policy-context-restoration.md)、[显式证据恢复指南（英文）](evidence-recovery.md)和 [ADR 0005（英文）](adr/0005-policy-context-restoration.md)。
 
 ```sh
 scout investigate --repo PATH --task TEXT --output DIR \

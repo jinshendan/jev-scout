@@ -56,7 +56,7 @@ flowchart LR
 | M3 — 修复与评测 | 固定的下游求解器、可执行验证、配对实验 | 调查能否改善端到端成功率与成本之间的权衡？ |
 | M4 — 仓库记忆 | 版本感知的复用、失效处理、按时间顺序评测 | 积累的经验何时有帮助，何时应该忽略？ |
 
-M1 基线和 M2a 适配器分别通过 [PR #5](https://github.com/jinshendan/jev-scout/pull/5) 和 [PR #6](https://github.com/jinshendan/jev-scout/pull/6) 交付。[PR #7](https://github.com/jinshendan/jev-scout/pull/7) 增加了 M2b 的恢复能力和受控比较输入；[PR #9](https://github.com/jinshendan/jev-scout/pull/9) 增加了 M2c 的相邻证据读取。各里程碑通过范围明确的 PR 逐步交付，同时更新路线图并完成相关验证。当前工作见[开放的 issues](https://github.com/jinshendan/jev-scout/issues)。
+M1 基线和 M2a 适配器分别通过 [PR #5](https://github.com/jinshendan/jev-scout/pull/5) 和 [PR #6](https://github.com/jinshendan/jev-scout/pull/6) 交付。[PR #7](https://github.com/jinshendan/jev-scout/pull/7) 增加了 M2b 的恢复能力和受控比较输入；[PR #9](https://github.com/jinshendan/jev-scout/pull/9) 增加了 M2c 的相邻证据读取；[PR #10](https://github.com/jinshendan/jev-scout/pull/10) 增加了 M2d 的上下文恢复。各里程碑通过范围明确的 PR 逐步交付，同时更新路线图并完成相关验证。当前工作见[开放的 issues](https://github.com/jinshendan/jev-scout/issues)。
 
 ## 快速开始
 
